@@ -7,14 +7,18 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Alert
+  Alert,
+  SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { VehicleCard } from '../components/VehicleCard';
 import { apiService } from '../services/apiService';
 import { notificationService } from '../services/notificationService';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 import { Vehicle } from '../types';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList, ROUTES } from '../navigation/routes';
+
 
 interface FavoriteVehicle extends Vehicle {
   favoriteId: number;
@@ -23,8 +27,10 @@ interface FavoriteVehicle extends Vehicle {
   previousPrice?: number;
 }
 
+type FavoritesScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Favorites'>;
+
 interface FavoritesScreenProps {
-  navigation: any;
+  navigation: FavoritesScreenNavigationProp;
 }
 
 export const FavoritesScreen: React.FC<FavoritesScreenProps> = ({ navigation }) => {
@@ -40,8 +46,8 @@ export const FavoritesScreen: React.FC<FavoritesScreenProps> = ({ navigation }) 
 
   const fetchFavorites = async () => {
     try {
-      const response: any = await apiService.get('/favorites');
-      setFavorites(response.favorites || []);
+      const response = await apiService.get('/favorites');
+      setFavorites((response as any).favorites || []);
     } catch (error: any) {
       console.error('Error fetching favorites:', error);
       if (error?.response?.status !== 401) {
@@ -90,7 +96,7 @@ export const FavoritesScreen: React.FC<FavoritesScreenProps> = ({ navigation }) 
     }
 
     // Navigate to comparison screen (if implemented)
-    navigation.navigate('CompareVehicles', { vehicleIds: selectedVehicles });
+    navigation.navigate(ROUTES.COMPARE_VEHICLES, { vehicleIds: selectedVehicles });
   };
 
   const handleVehiclePress = (vehicle: FavoriteVehicle) => {
@@ -101,12 +107,7 @@ export const FavoritesScreen: React.FC<FavoritesScreenProps> = ({ navigation }) 
     }
   };
 
-  const handleFavoriteToggle = (vehicleId: number, isFavorited: boolean) => {
-    if (!isFavorited) {
-      // Remove from local state when unfavorited
-      setFavorites(prev => prev.filter(fav => fav.id !== vehicleId));
-    }
-  };
+
 
   const renderVehicleItem = ({ item }: { item: FavoriteVehicle }) => (
     <View style={styles.vehicleContainer}>
@@ -217,15 +218,15 @@ export const FavoritesScreen: React.FC<FavoritesScreenProps> = ({ navigation }) 
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading your favorites...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {renderHeader()}
       {renderCompareBar()}
       
@@ -248,7 +249,7 @@ export const FavoritesScreen: React.FC<FavoritesScreenProps> = ({ navigation }) 
         ]}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     padding: spacing.lg,
     paddingTop: spacing.xl,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -313,14 +314,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   compareActionButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: colors.white + '33',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: colors.white + '4D',
   },
   compareActionButtonDisabled: {
     opacity: 0.5,
@@ -371,7 +372,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: colors.white + 'E6',
     borderWidth: 2,
     borderColor: colors.lightGrey,
     justifyContent: 'center',
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.lg,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -432,4 +433,4 @@ const styles = StyleSheet.create({
     color: colors.lightGrey,
     marginTop: spacing.md,
   },
-}); 
+});

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 import { Vehicle } from '../types';
 import { FavoriteButton } from './FavoriteButton';
 import { vehicleFeatureService } from '../services/vehicleFeatureService';
@@ -22,8 +22,6 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   const primaryPhoto = vehicle.photos?.find(p => p.isPrimary) || vehicle.photos?.[0];
   const isPremium = vehicleFeatureService.isPremiumVehicle(vehicle);
   const conditionText = vehicle.conditionRating ? vehicleFeatureService.getVehicleConditionText(vehicle.conditionRating) : null;
-  const verificationStatus = vehicleFeatureService.getVerificationStatusText(vehicle.verificationStatus);
-  const verificationColor = vehicleFeatureService.getVerificationStatusColor(vehicle.verificationStatus);
 
   const getFuelIcon = (fuelType?: string) => {
     switch (fuelType) {
@@ -42,7 +40,7 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
     const stars = [];
     for (let i = 1; i <= 5; i++) {
       stars.push(
-        <Text key={i} style={[styles.star, { color: i <= rating ? '#F59E0B' : '#E5E7EB' }]}>
+        <Text key={i} style={[styles.star, { color: i <= rating ? colors.star : colors.lightBorder }]}>
           ★
         </Text>
       );
@@ -71,7 +69,7 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
           {/* Verification Status */}
           {vehicle.verificationStatus === 'verified' && (
             <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Ionicons name="checkmark-circle" size={16} color={colors.verified} />
               <Text style={styles.verifiedText}>Verified</Text>
             </View>
           )}
@@ -116,7 +114,7 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
               <View style={styles.specsRow}>
                 {vehicle.seatingCapacity && (
                   <View style={styles.specItem}>
-                    <Ionicons name="people-outline" size={14} color="#6B7280" />
+                    <Ionicons name="people-outline" size={14} color={colors.grey} />
                     <Text style={styles.specText}>{vehicle.seatingCapacity}</Text>
                   </View>
                 )}
@@ -167,14 +165,14 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
               <View style={styles.servicesRow}>
                 {vehicle.deliveryAvailable && (
                   <View style={styles.serviceItem}>
-                    <Ionicons name="car-outline" size={12} color="#10B981" />
+                    <Ionicons name="car-outline" size={12} color={colors.verified} />
                     <Text style={styles.serviceText}>Delivery</Text>
                   </View>
                 )}
                 
                 {vehicle.airportPickup && (
                   <View style={styles.serviceItem}>
-                    <Ionicons name="airplane-outline" size={12} color="#3B82F6" />
+                    <Ionicons name="airplane-outline" size={12} color={colors.primary} />
                     <Text style={styles.serviceText}>Airport</Text>
                   </View>
                 )}
@@ -212,7 +210,7 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
               <View style={styles.reviewsRow}>
                 <View style={styles.ratingContainer}>
                   <Text style={styles.ratingText}>{vehicle.averageRating.toFixed(1)}</Text>
-                  <Ionicons name="star" size={14} color="#F59E0B" />
+                  <Ionicons name="star" size={14} color={colors.star} />
                 </View>
                 <Text style={styles.reviewsText}>({vehicle.totalReviews} reviews)</Text>
               </View>
@@ -233,7 +231,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
     marginBottom: spacing.md,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -271,7 +269,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   rhdBadge: {
-    backgroundColor: '#E74C3C',
+    backgroundColor: colors.error,
   },
   badgeIcon: {
     marginRight: 4,
@@ -315,7 +313,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 20,
     padding: 8,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -336,31 +334,39 @@ const styles = StyleSheet.create({
   premiumBadge: {
     position: 'absolute',
     top: 10,
-    right: 10,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    padding: 4,
+    left: 10,
+    backgroundColor: colors.premium,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
   },
   premiumBadgeText: {
     color: colors.white,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
   },
   verifiedBadge: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    padding: 4,
+    backgroundColor: colors.verified,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   verifiedText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
+    marginLeft: 2,
   },
   advancedInfo: {
-    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   specsRow: {
     flexDirection: 'row',
@@ -457,7 +463,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
     marginBottom: spacing.md,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,

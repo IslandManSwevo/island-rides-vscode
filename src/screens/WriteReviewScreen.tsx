@@ -7,8 +7,8 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
-  Image
+  Image,
+  SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StackScreenProps } from '@react-navigation/stack';
@@ -16,10 +16,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { apiService } from '../services/apiService';
 import { notificationService } from '../services/notificationService';
 import { reviewPromptService } from '../services/reviewPromptService';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 import { RootStackParamList, ROUTES } from '../navigation/routes';
 
 type WriteReviewScreenProps = StackScreenProps<RootStackParamList, typeof ROUTES.WRITE_REVIEW>;
+
+interface UploadResponse {
+  url: string;
+}
 
 export const WriteReviewScreen: React.FC<WriteReviewScreenProps> = ({ navigation, route }) => {
   const { booking } = route.params;
@@ -43,10 +47,25 @@ export const WriteReviewScreen: React.FC<WriteReviewScreenProps> = ({ navigation
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
+      base64: true, // Request base64 for size validation
     });
 
     if (!result.canceled && result.assets[0]) {
-      setPhotos([...photos, result.assets[0].uri]);
+      const asset = result.assets[0];
+      // Validate image format
+      const fileExtension = asset.uri.split('.').pop()?.toLowerCase();
+      if (fileExtension !== 'jpeg' && fileExtension !== 'jpg' && fileExtension !== 'png') {
+        notificationService.warning('Unsupported image format. Please use JPEG or PNG.', { duration: 4000 });
+        return;
+      }
+
+      // Validate image size (e.g., max 5MB)
+      if (asset.base64 && (asset.base64.length * 0.75) > 5 * 1024 * 1024) {
+        notificationService.warning('Image size exceeds 5MB limit.', { duration: 4000 });
+        return;
+      }
+
+      setPhotos([...photos, asset.uri]);
     }
   };
 
@@ -54,46 +73,63 @@ export const WriteReviewScreen: React.FC<WriteReviewScreenProps> = ({ navigation
     setPhotos(photos.filter((_, i) => i !== index));
   };
 
+  const uploadPhoto = async (uri: string): Promise<string> => {
+    const formData = new FormData();
+    const fileType = uri.split('.').pop();
+    formData.append('photo', {
+      uri,
+      name: `photo.${fileType}`,
+      type: `image/${fileType}`,
+    } as unknown as Blob); // React Native file object for FormData
+
+    const response = await apiService.uploadFile<UploadResponse>('/upload', formData);
+
+    return response.url; // Assuming the API returns the URL of the uploaded photo
+  };
+
   const submitReview = async () => {
     if (rating === 0) {
-      notificationService.warning('Please select a rating', { duration: 3000 });
+      notificationService.warning('Please select a rating of at least 1 star.', { duration: 4000 });
       return;
     }
 
-    if (comment.trim().length < 10) {
-      notificationService.warning('Please write at least 10 characters', { duration: 3000 });
+    const trimmedComment = comment.trim();
+    if (trimmedComment.length < 10) {
+      notificationService.warning(`Your comment has ${trimmedComment.length} characters. A minimum of 10 is required.`, { duration: 4000 });
       return;
     }
 
     setLoading(true);
     try {
+      const uploadedPhotoUrls = await Promise.all(photos.map(uploadPhoto));
+
       const reviewData = {
         bookingId: booking.id,
         rating,
         comment: comment.trim(),
-        photos: photos // For future photo upload implementation
+        photos: uploadedPhotoUrls,
       };
 
       await apiService.post('/reviews', reviewData);
-      
+
       // Mark review as completed in the prompt service
       await reviewPromptService.markReviewCompleted(booking.id);
-      
+
       notificationService.success('Review submitted successfully!', {
         duration: 4000,
         action: {
           label: 'View Booking',
-          handler: () => navigation.navigate('Profile')
-        }
+          handler: () => navigation.navigate('Profile'),
+        },
       });
 
       navigation.goBack();
     } catch (error: any) {
       console.error('Review submission error:', error);
-      
+
       if (error?.response?.status === 400) {
         notificationService.error(error.response.data.error || 'Invalid review data', {
-          duration: 4000
+          duration: 4000,
         });
       } else {
         notificationService.error('Failed to submit review', {
@@ -172,7 +208,8 @@ export const WriteReviewScreen: React.FC<WriteReviewScreenProps> = ({ navigation
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={{flex: 1, backgroundColor: colors.white}}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.title}>Write a Review</Text>
         <Text style={styles.subtitle}>
@@ -242,6 +279,7 @@ export const WriteReviewScreen: React.FC<WriteReviewScreenProps> = ({ navigation
         </TouchableOpacity>
       </View>
     </ScrollView>
+   </SafeAreaView>
   );
 };
 
@@ -270,7 +308,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     padding: spacing.lg,
     borderRadius: borderRadius.lg,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -421,4 +459,4 @@ const styles = StyleSheet.create({
     color: colors.lightGrey,
     fontSize: 16,
   },
-}); 
+});

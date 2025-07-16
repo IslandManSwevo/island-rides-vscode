@@ -4,44 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppHeader } from '../components/AppHeader';
 import { vehicleService } from '../services/vehicleService';
 import { useAuth } from '../context/AuthContext';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
-import { Island } from '../types';
-import { ROUTES } from '../navigation/routes';
-
-interface IslandOption {
-  id: Island;
-  name: string;
-  description: string;
-  emoji: string;
-  features: string[];
-}
-
-const islands: IslandOption[] = [
-  {
-    id: 'Nassau',
-    name: 'New Providence (Nassau)',
-    description: 'Capital city with beaches, resorts, and cultural attractions',
-    emoji: '🏙️',
-    features: ['City Life', 'Beaches', 'Shopping', 'Nightlife']
-  },
-  {
-    id: 'Freeport',
-    name: 'Grand Bahama (Freeport)', 
-    description: 'Duty-free shopping, pristine beaches, and water sports',
-    emoji: '🏖️',
-    features: ['Duty-Free Shopping', 'Water Sports', 'Beaches', 'Resorts']
-  },
-  {
-    id: 'Exuma',
-    name: 'Exuma',
-    description: 'Swimming pigs, iguanas, and crystal-clear waters',
-    emoji: '🐷',
-    features: ['Swimming Pigs', 'Nature', 'Adventures', 'Secluded Beaches']
-  },
-];
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
+import { Island, VehicleRecommendation } from '../types';
+import { ROUTES, RootStackParamList } from '../navigation/routes';
+import { islands, IslandOption } from '../constants/islands';
+import { NavigationProp } from '@react-navigation/native';
 
 interface IslandSelectionScreenProps {
-  navigation: any;
+  navigation: NavigationProp<RootStackParamList>;
 }
 
 const IslandSelectionScreen: React.FC<IslandSelectionScreenProps> = ({
@@ -50,39 +20,75 @@ const IslandSelectionScreen: React.FC<IslandSelectionScreenProps> = ({
   const { logout } = useAuth();
   // ✅ NO useEffect auth check - App.tsx guarantees we're authenticated
 
+  const [isLoading, setIsLoading] = React.useState(false);
+
   const handleIslandSelect = async (island: string) => {
     console.log('🏝️ Island selected:', island);
     
+    // Prevent multiple simultaneous requests
+    if (isLoading) {
+      console.log('⚠️ Navigation already in progress, ignoring duplicate request');
+      return;
+    }
+    
     try {
-      const vehicles = await vehicleService.getVehiclesByIsland(island as Island);
-      navigation.navigate('SearchResults', { island, vehicles });
+      setIsLoading(true);
+      console.log('🔄 Starting vehicle fetch for island:', island);
+      
+      // Add timeout to prevent indefinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout - please try again')), 10000)
+      );
+      
+      const vehiclesPromise = vehicleService.getVehiclesByIsland(island as Island);
+      const vehicles = await Promise.race([vehiclesPromise, timeoutPromise]) as VehicleRecommendation[];
+      
+      console.log('✅ Vehicles fetched successfully:', vehicles?.length || 0);
+      
+      // Ensure navigation happens on next tick to avoid race conditions
+      setTimeout(() => {
+        navigation.navigate('SearchResults', { island, vehicles });
+      }, 0);
+      
     } catch (error) {
-      console.error('🏝️ Island selection failed:', error);
+      console.error('❌ Island selection failed:', error);
       
       // Handle session expiration by triggering logout
       if (error instanceof Error && (
         error.message.includes('Session expired') || 
         error.message.includes('Invalid token') || 
-        error.message.includes('Unauthorized')
+        error.message.includes('Unauthorized') ||
+        error.message.includes('TOKEN_MISSING')
       )) {
         console.log('🚪 Session expired, triggering logout');
         Alert.alert(
           'Session Expired',
-          error.message,
+          'Your session has expired. Please log in again.',
           [{ text: 'OK', onPress: logout }]
         );
       } else {
-        Alert.alert('Error', `Failed to load vehicles: ${error instanceof Error ? error.message : 'An unknown error occurred'}`);
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        Alert.alert(
+          'Loading Error', 
+          `Failed to load vehicles: ${errorMessage}. Please try again.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Retry', onPress: () => handleIslandSelect(island) }
+          ]
+        );
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const renderIslandCard = (island: IslandOption) => (
     <TouchableOpacity
       key={island.id}
-      style={styles.islandCard}
+      style={[styles.islandCard, isLoading && styles.islandCardDisabled]}
       onPress={() => handleIslandSelect(island.id)}
-      activeOpacity={0.8}
+      activeOpacity={isLoading ? 1 : 0.8}
+      disabled={isLoading}
     >
       <View style={styles.islandHeader}>
         <Text style={styles.islandEmoji}>{island.emoji}</Text>
@@ -90,7 +96,13 @@ const IslandSelectionScreen: React.FC<IslandSelectionScreenProps> = ({
           <Text style={styles.islandName}>{island.name}</Text>
           <Text style={styles.islandDescription}>{island.description}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={24} color={colors.lightGrey} />
+        {isLoading ? (
+          <View style={styles.loadingIndicator}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        ) : (
+          <Ionicons name="chevron-forward" size={24} color={colors.lightGrey} />
+        )}
       </View>
       <View style={styles.featuresContainer}>
         {island.features.map((feature, index) => (
@@ -148,19 +160,21 @@ const IslandSelectionScreen: React.FC<IslandSelectionScreenProps> = ({
         </View>
 
         {/* Test Section - Remove in production */}
-        <View style={styles.testSection}>
-          <Text style={styles.sectionTitle}>Development Testing</Text>
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => navigation.navigate('Chat', {
-              context: { participantId: 2 },
-              title: 'Test Chat'
-            })}
-          >
-            <Ionicons name="chatbubbles" size={20} color={colors.white} />
-            <Text style={styles.testButtonText}>Test Chat Feature</Text>
-          </TouchableOpacity>
-        </View>
+        {__DEV__ && (
+          <View style={styles.testSection}>
+            <Text style={styles.sectionTitle}>Development Testing</Text>
+            <TouchableOpacity
+              style={styles.testButton}
+              onPress={() => navigation.navigate('Chat', {
+                context: { participantId: 2 },
+                title: 'Test Chat'
+              })}
+            >
+              <Ionicons name="chatbubbles" size={20} color={colors.white} />
+              <Text style={styles.testButtonText}>Test Chat Feature</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -213,7 +227,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -233,7 +247,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     marginBottom: spacing.md,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -296,6 +310,18 @@ const styles = StyleSheet.create({
   testButtonText: {
     color: colors.white,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  islandCardDisabled: {
+    opacity: 0.6,
+  },
+  loadingIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 12,
+    color: colors.primary,
     fontWeight: '600',
   },
 });

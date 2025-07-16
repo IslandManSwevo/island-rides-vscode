@@ -2,6 +2,18 @@ import { apiService } from './apiService';
 import { ChatContext, ConversationResponse, Vehicle, Booking, User } from '../types';
 
 class ConversationService {
+  private static instance: ConversationService;
+
+  // Private constructor to prevent direct instantiation
+  private constructor() {}
+
+  // Public method to get the singleton instance
+  public static getInstance(): ConversationService {
+    if (!ConversationService.instance) {
+      ConversationService.instance = new ConversationService();
+    }
+    return ConversationService.instance;
+  }
   /**
    * Resolve chat context to a conversation ID and participant info
    */
@@ -19,139 +31,68 @@ class ConversationService {
     }
   }
 
-  /**
-   * Handle host + vehicle context (potential renter messaging host about a car)
-   */
+  private async createConversationByParticipant(participantId: number): Promise<number> {
+    const response = await apiService.post<{ conversationId: number }>('/api/conversations', {
+      participantId,
+    });
+    return response.conversationId;
+  }
+
+  private async fetchEntity<T>(endpoint: string, entityType: string, id: number): Promise<T> {
+    const entity = await apiService.get<T>(`${endpoint}/${id}`);
+    if (!entity) {
+      throw new Error(`${entityType} with ID ${id} not found`);
+    }
+    return entity;
+  }
+
   private async findOrCreateHostConversation(hostId: number, vehicleId: number): Promise<ConversationResponse> {
     try {
-      console.log(`🏠 Finding/creating host conversation: hostId=${hostId}, vehicleId=${vehicleId}`);
-
-      // First, get vehicle details to verify the host owns it
-      const vehicles = await apiService.get<Vehicle[]>('/api/vehicles');
-      const vehicle: Vehicle | undefined = vehicles.find((v: Vehicle) => v.id === vehicleId);
-      
-      if (!vehicle) {
-        throw new Error(`Vehicle with ID ${vehicleId} not found`);
-      }
-
-      // Get all users to find the host
-      const users = await apiService.get<User[]>('/api/users');
-      const host: User | undefined = users.find((u: User) => u.id === hostId);
-      
-      if (!host) {
-        throw new Error(`Host with ID ${hostId} not found`);
-      }
-
-      // Create or find conversation with the host
-      const conversationResponse = await apiService.post<{ conversationId: number }>('/api/conversations', {
-        participantId: hostId
-      });
+      const vehicle = await this.fetchEntity<Vehicle>('/api/vehicles', 'Vehicle', vehicleId);
+      const host = await this.fetchEntity<User>('/api/users', 'Host', hostId);
+      const conversationId = await this.createConversationByParticipant(hostId);
 
       return {
-        conversationId: conversationResponse.conversationId,
-        participant: {
-          id: host.id,
-          firstName: host.firstName,
-          lastName: host.lastName
-        },
-        vehicle: {
-          id: vehicle.id,
-          make: vehicle.make,
-          model: vehicle.model,
-          year: vehicle.year
-        }
+        conversationId,
+        participant: { id: host.id, firstName: host.firstName, lastName: host.lastName },
+        vehicle: { id: vehicle.id, make: vehicle.make, model: vehicle.model, year: vehicle.year },
       };
-
     } catch (error) {
       console.error('❌ Failed to resolve host conversation:', error);
       throw new Error('Failed to start conversation with host');
     }
   }
 
-  /**
-   * Handle booking context (active rental communication)
-   */
   private async findOrCreateBookingConversation(bookingId: number): Promise<ConversationResponse> {
     try {
-      console.log(`📋 Finding/creating booking conversation: bookingId=${bookingId}`);
-
-      // Get booking details to find the other participant
-      const bookings = await apiService.get<Booking[]>('/api/bookings');
-      const booking: Booking | undefined = bookings.find((b: Booking) => b.id === bookingId);
-      
-      if (!booking) {
-        throw new Error(`Booking with ID ${bookingId} not found`);
+      const booking = await this.fetchEntity<Booking>('/api/bookings', 'Booking', bookingId);
+      const vehicle = await this.fetchEntity<Vehicle>('/api/vehicles', 'Vehicle', booking.vehicleId);
+      if (!vehicle.ownerId) {
+        throw new Error('Vehicle owner information is not available for this booking');
       }
-
-      // Get vehicle details
-      const vehicles = await apiService.get<Vehicle[]>('/api/vehicles');
-      const vehicle: Vehicle | undefined = vehicles.find((v: Vehicle) => v.id === booking.vehicleId);
-
-      // Get all users to find the other participant
-      const users = await apiService.get<User[]>('/api/users');
-      
-      // Current user is the renter, so we need to find the vehicle owner (host)
-      const host: User | undefined = users.find((u: User) => u.id === vehicle?.ownerId);
-      
-      if (!host) {
-        throw new Error('Host not found for this booking');
-      }
-
-      // Create or find conversation with the host
-      const conversationResponse = await apiService.post<{ conversationId: number }>('/api/conversations', {
-        participantId: host.id
-      });
+      const host = await this.fetchEntity<User>('/api/users', 'Host', vehicle.ownerId);
+      const conversationId = await this.createConversationByParticipant(host.id);
 
       return {
-        conversationId: conversationResponse.conversationId,
-        participant: {
-          id: host.id,
-          firstName: host.firstName,
-          lastName: host.lastName
-        },
-        vehicle: vehicle ? {
-          id: vehicle.id,
-          make: vehicle.make,
-          model: vehicle.model,
-          year: vehicle.year
-        } : undefined
+        conversationId,
+        participant: { id: host.id, firstName: host.firstName, lastName: host.lastName },
+        vehicle: { id: vehicle.id, make: vehicle.make, model: vehicle.model, year: vehicle.year },
       };
-
     } catch (error) {
       console.error('❌ Failed to resolve booking conversation:', error);
       throw new Error('Failed to start conversation for this booking');
     }
   }
 
-  /**
-   * Handle direct participant context (general user-to-user messaging)
-   */
   private async findOrCreateDirectConversation(participantId: number): Promise<ConversationResponse> {
     try {
-      console.log(`👤 Finding/creating direct conversation: participantId=${participantId}`);
-
-      // Get user details
-      const users = await apiService.get<User[]>('/api/users');
-      const participant: User | undefined = users.find((u: User) => u.id === participantId);
-      
-      if (!participant) {
-        throw new Error(`User with ID ${participantId} not found`);
-      }
-
-      // Create or find conversation with the participant
-      const conversationResponse = await apiService.post<{ conversationId: number }>('/api/conversations', {
-        participantId: participantId
-      });
+      const participant = await this.fetchEntity<User>('/api/users', 'User', participantId);
+      const conversationId = await this.createConversationByParticipant(participantId);
 
       return {
-        conversationId: conversationResponse.conversationId,
-        participant: {
-          id: participant.id,
-          firstName: participant.firstName,
-          lastName: participant.lastName
-        }
+        conversationId,
+        participant: { id: participant.id, firstName: participant.firstName, lastName: participant.lastName },
       };
-
     } catch (error) {
       console.error('❌ Failed to resolve direct conversation:', error);
       throw new Error('Failed to start conversation with user');
@@ -172,4 +113,4 @@ class ConversationService {
   }
 }
 
-export default new ConversationService();
+export const conversationService = ConversationService.getInstance();

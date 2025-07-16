@@ -1,14 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 import { notificationService } from '../services/notificationService';
 import { reviewPromptService } from '../services/reviewPromptService';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
-import { Button } from '../components/Button';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
+import Button from '../components/Button';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { Vehicle } from '../types';
+import { RootStackParamList, ROUTES } from '../navigation/routes';
+import { transformBookingForReview } from '../utils/bookingTransforms';
 
-export const BookingConfirmedScreen = ({ navigation, route }: any) => {
+type BookingConfirmedScreenNavigationProp = StackNavigationProp<RootStackParamList, typeof ROUTES.BOOKING_CONFIRMED>;
+type BookingConfirmedScreenRouteProp = RouteProp<RootStackParamList, typeof ROUTES.BOOKING_CONFIRMED>;
+
+interface BookingConfirmedScreenProps {
+  navigation: BookingConfirmedScreenNavigationProp;
+  route: BookingConfirmedScreenRouteProp;
+}
+
+export const BookingConfirmedScreen: React.FC<BookingConfirmedScreenProps> = ({ navigation, route }) => {
   const { booking, vehicle } = route.params;
   const [showReceipt, setShowReceipt] = useState(false);
 
@@ -25,20 +37,36 @@ export const BookingConfirmedScreen = ({ navigation, route }: any) => {
 
     // If this is a completed booking, schedule review prompt
     if (booking.status === 'completed') {
-      const bookingForReview = {
-        id: booking.id,
-        vehicle: {
-          id: booking.vehicle.id,
-          make: booking.vehicle.make,
-          model: booking.vehicle.model,
-          year: booking.vehicle.year
-        },
-        startDate: booking.start_date,
-        endDate: booking.end_date,
-        status: booking.status
+      const scheduleReviewPrompt = async () => {
+        try {
+          // Transform booking to match BookingWithVehicle interface
+          const bookingWithVehicle = {
+            ...booking,
+            startDate: booking.start_date,
+            endDate: booking.end_date,
+            totalAmount: booking.total_amount,
+            status: booking.status as 'pending' | 'confirmed' | 'completed' | 'cancelled',
+            userId: 0, // Will be set by auth service in reviewPromptService
+            vehicleId: booking.vehicle.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          
+          const bookingForReview = transformBookingForReview(bookingWithVehicle);
+          if (bookingForReview) {
+            await reviewPromptService.scheduleReviewPrompt(bookingForReview);
+            console.log('Review prompt scheduled successfully for booking:', booking.id);
+          } else {
+            console.warn('Cannot schedule review prompt: Invalid booking data for booking:', booking.id);
+          }
+        } catch (error) {
+          console.error('Failed to schedule review prompt for booking:', booking.id, error);
+          // Don't show error to user as this is a background process
+          // The app should continue to work normally even if review prompt fails
+        }
       };
-      
-      reviewPromptService.scheduleReviewPrompt(bookingForReview);
+
+      scheduleReviewPrompt();
     }
   }, [booking]);
 
@@ -52,11 +80,12 @@ export const BookingConfirmedScreen = ({ navigation, route }: any) => {
   };
 
   const handleBackToHome = () => {
-    navigation.navigate('IslandSelection');
+    navigation.navigate(ROUTES.ISLAND_SELECTION);
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView>
       <View style={styles.header}>
         <View style={styles.successIcon}>
           <Ionicons name="checkmark-circle" size={80} color={colors.primary} />
@@ -99,14 +128,14 @@ export const BookingConfirmedScreen = ({ navigation, route }: any) => {
           </Text>
           <View style={[
             styles.driveBadge,
-            vehicle.drive_side === 'LHD' ? styles.lhdBadge : styles.rhdBadge
+            vehicle.driveSide === 'LHD' ? styles.lhdBadge : styles.rhdBadge
           ]}>
             <Ionicons 
               name="car-outline" 
               size={16} 
               color={colors.white} 
             />
-            <Text style={styles.badgeText}>{vehicle.drive_side}</Text>
+            <Text style={styles.badgeText}>{vehicle.driveSide}</Text>
           </View>
         </View>
         
@@ -159,7 +188,8 @@ export const BookingConfirmedScreen = ({ navigation, route }: any) => {
         bookingId={booking.id}
         onClose={() => setShowReceipt(false)}
       />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -238,7 +268,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   rhdBadge: {
-    backgroundColor: '#E74C3C',
+    backgroundColor: colors.error,
   },
   badgeText: {
     color: colors.white,

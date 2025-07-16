@@ -115,6 +115,7 @@ export interface AuthResponse {
   message: string;
   user: User;
   token: string;
+  refreshToken: string;
 }
 
 export interface LoginRequest {
@@ -143,6 +144,7 @@ export interface Vehicle {
   available: boolean;
   driveSide: 'LHD' | 'RHD';
   createdAt: string;
+  description?: string;
   
   // Advanced specifications
   engineType?: string;
@@ -168,6 +170,9 @@ export interface Vehicle {
   conditionRating?: number; // 1-5 rating
   lastInspectionDate?: string;
   nextServiceDue?: string;
+  lastMaintenanceDate?: string;
+  nextMaintenanceDate?: string;
+  safetyFeatures?: string[];
   insurancePolicyNumber?: string;
   insuranceExpires?: string;
   verificationStatus?: 'pending' | 'verified' | 'rejected' | 'expired';
@@ -223,6 +228,10 @@ export interface VehicleFeature {
   additionalCost?: number;
   notes?: string;
 }
+
+// Type aliases for backward compatibility and cleaner imports
+export type Feature = VehicleFeature;
+export type FeatureCategory = VehicleFeatureCategory;
 
 export interface VehicleAmenity {
   id: number;
@@ -418,4 +427,54 @@ export interface ProfileData {
   };
   bookings: ProfileBooking[];
   stats: ProfileStats;
+}
+
+// Owner Dashboard types
+export interface DashboardOverview {
+  grossRevenue: number;
+  netRevenue: number;
+  activeVehicles: number;
+  totalVehicles: number;
+  totalBookings: number;
+  pendingBookings: number;
+  occupancyRate: number;
+  averageRating: number;
+  totalReviews: number;
+  newBookingsThisWeek: number;
+}
+
+export interface DailyRevenue {
+  date: string;
+  grossRevenue: number;
+}
+
+export interface VehicleRevenue {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  bookings: number;
+  grossRevenue: number;
+}
+
+export interface RevenueData {
+  dailyData: DailyRevenue[];
+  vehicleBreakdown: VehicleRevenue[];
+}
+
+export interface Goal {
+  id: string;
+  goalType: string;
+  targetValue: number;
+  currentValue: number;
+  progressPercentage: number;
+  targetPeriod: 'monthly' | 'quarterly' | 'yearly';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewGoal {
+  goalType: string;
+  targetValue: string;
+  targetPeriod: 'monthly' | 'quarterly' | 'yearly';
 }

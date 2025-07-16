@@ -3,7 +3,7 @@ import { TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiService } from '../services/apiService';
 import { notificationService } from '../services/notificationService';
-import { colors } from '../styles/theme';
+import { colors } from '../styles/Theme';
 import { navigationRef } from '../navigation/navigationRef';
 import { ROUTES } from '../navigation/routes';
 
@@ -27,21 +27,20 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
   const pulseAnim = new Animated.Value(1);
 
   useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      try {
+        setChecking(true);
+        const response: any = await apiService.get(`/favorites/check/${vehicleId}`);
+        setIsFavorited(response.isFavorited);
+      } catch (error) {
+        console.error('Error checking favorite status:', error);
+        // Don't show error for checking status, just log it
+      } finally {
+        setChecking(false);
+      }
+    };
     checkFavoriteStatus();
   }, [vehicleId]);
-
-  const checkFavoriteStatus = async () => {
-    try {
-      setChecking(true);
-      const response: any = await apiService.get(`/favorites/check/${vehicleId}`);
-      setIsFavorited(response.isFavorited);
-    } catch (error) {
-      console.error('Error checking favorite status:', error);
-      // Don't show error for checking status, just log it
-    } finally {
-      setChecking(false);
-    }
-  };
 
   const animatePress = () => {
     Animated.sequence([
@@ -109,27 +108,32 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
           }
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error toggling favorite:', error);
-      
-      // Show specific error messages
-      if (error?.response?.status === 401) {
-        notificationService.error('Please log in to save favorites', {
-          duration: 4000
-        });
-      } else if (error?.response?.status === 404) {
-        notificationService.error('Vehicle not found', {
-          duration: 3000
-        });
-      } else {
-        notificationService.error('Failed to update favorites', {
-          duration: 3000,
-          action: {
-            label: 'Retry',
-            handler: () => toggleFavorite()
-          }
-        });
+
+      let errorMessage = 'Failed to update favorites';
+      let statusCode: number | undefined;
+
+      if (apiService.isAxiosError(error)) {
+        statusCode = error.response?.status;
+        if (statusCode === 401) {
+          errorMessage = 'Please log in to save favorites';
+        } else if (statusCode === 404) {
+          errorMessage = 'Vehicle not found';
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
       }
+
+      notificationService.error(errorMessage, {
+        duration: 3000,
+        action: (statusCode !== 401 && statusCode !== 404) ? {
+          label: 'Retry',
+          handler: () => toggleFavorite(),
+        } : undefined,
+      });
     } finally {
       setLoading(false);
     }
@@ -173,4 +177,4 @@ export const FavoriteButton: React.FC<FavoriteButtonProps> = ({
       </Animated.View>
     </TouchableOpacity>
   );
-}; 
+};

@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transformToCamelCase, transformToSnakeCase } from '../utils/caseTransform';
+import { BaseService } from './base/BaseService';
 
-class StorageService {
+export class StorageService extends BaseService {
   async set(key: string, value: any): Promise<void> {
     try {
       const snakeCaseValue = transformToSnakeCase(value);
@@ -16,11 +17,17 @@ class StorageService {
     try {
       const value = await AsyncStorage.getItem(key);
       if (value === null) return null;
-      const parsedValue = JSON.parse(value);
-      return transformToCamelCase(parsedValue) as T;
+
+      try {
+        const parsedValue = JSON.parse(value);
+        return transformToCamelCase(parsedValue) as T;
+      } catch (parseError) {
+        console.error(`Error parsing JSON for key "${key}":`, parseError);
+        throw new Error(`Failed to parse stored data for key: ${key}`);
+      }
     } catch (error) {
-      console.error('Error retrieving data:', error);
-      throw error;
+      console.error(`Error retrieving data for key "${key}":`, error);
+      throw new Error(`Failed to retrieve data for key: ${key}`);
     }
   }
 
@@ -55,6 +62,18 @@ class StorageService {
     await this.remove('authToken');
   }
 
+  async setRefreshToken(token: string): Promise<void> {
+    await this.set('refreshToken', token);
+  }
+
+  async getRefreshToken(): Promise<string | null> {
+    return this.get<string>('refreshToken');
+  }
+
+  async clearRefreshToken(): Promise<void> {
+    await this.remove('refreshToken');
+  }
+
   // User preferences storage
   async setUserPreferences(preferences: Record<string, any>): Promise<void> {
     await this.set('userPreferences', preferences);
@@ -63,6 +82,11 @@ class StorageService {
   async getUserPreferences<T>(): Promise<T | null> {
     return this.get<T>('userPreferences');
   }
+
+  protected async onInit(): Promise<void> {
+    // StorageService doesn't need special initialization
+    // AsyncStorage is ready to use immediately
+  }
 }
 
-export const storageService = new StorageService();
+export const storageService = StorageService.getInstance();

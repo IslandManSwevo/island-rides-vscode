@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Button } from '../components/Button';
+import Button from '../components/Button';
 import { notificationService } from '../services/notificationService';
 import { Input } from '../components/Input';
 import { useAuth } from '../context/AuthContext';
-import { colors, typography, spacing } from '../styles/theme';
+import { colors, typography, spacing } from '../styles/Theme';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList, ROUTES } from '../navigation/routes';
+
+type RegistrationScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Registration'>;
 
 interface RegistrationScreenProps {
-  navigation: any;
+  navigation: RegistrationScreenNavigationProp;
+  defaultRole?: 'customer' | 'owner';
 }
 
-export const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ navigation }) => {
+export const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ navigation, defaultRole = 'customer' }) => {
   const { register, isLoading, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
@@ -72,7 +77,7 @@ export const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ navigati
         formData.password,
         formData.firstName.trim(),
         formData.lastName.trim(),
-        'customer' // Default role
+        defaultRole
       );
       notificationService.success('Welcome to Island Rides!', {
         title: 'Registration Successful',
@@ -166,7 +171,7 @@ export const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ navigati
             
             <Button
               title="Already have an account? Sign in"
-              onPress={() => navigation.navigate('Login')}
+              onPress={() => navigation.navigate(ROUTES.LOGIN)}
               variant="secondary"
             />
           </View>
@@ -201,13 +206,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   errorContainer: {
-    backgroundColor: '#ffebee',
+    backgroundColor: colors.error + '20',
     padding: spacing.md,
     borderRadius: 8,
     marginBottom: spacing.md,
   },
   errorText: {
-    color: '#c62828',
+    color: colors.error,
     textAlign: 'center',
     fontSize: 14,
   },

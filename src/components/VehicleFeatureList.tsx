@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { VehicleFeature, VehicleFeatureCategory } from '../types';
 import { vehicleFeatureService } from '../services/vehicleFeatureService';
+import { colors } from '../styles/Theme';
 
 interface VehicleFeatureListProps {
   features: VehicleFeature[];
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
   },
   noFeaturesText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: '#666666',
     textAlign: 'center',
     fontStyle: 'italic',
     padding: 20,
@@ -257,14 +258,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#F5F5F5',
     borderRadius: 8,
     marginBottom: 8,
   },
   categoryTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#333333',
   },
   categoryMeta: {
     flexDirection: 'row',
@@ -272,12 +273,12 @@ const styles = StyleSheet.create({
   },
   categoryCount: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.grey,
     marginRight: 8,
   },
   expandIcon: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.grey,
     fontWeight: 'bold',
   },
   featuresContainer: {
@@ -285,11 +286,11 @@ const styles = StyleSheet.create({
   },
   featureItem: {
     marginBottom: 12,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.lightBorder,
   },
   compactFeatureItem: {
     padding: 8,
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
     minWidth: '45%',
   },
   interactiveFeatureItem: {
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -326,14 +327,14 @@ const styles = StyleSheet.create({
   featureName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1f2937',
+    color: colors.text,
     flex: 1,
   },
   compactFeatureName: {
     fontSize: 14,
   },
   premiumBadge: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: colors.star,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -342,17 +343,17 @@ const styles = StyleSheet.create({
   premiumBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.white,
   },
   featureDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.grey,
     lineHeight: 18,
     marginBottom: 4,
   },
   additionalCost: {
     fontSize: 14,
-    color: '#dc2626',
+    color: colors.error,
     fontWeight: '500',
   },
   inclusionIndicator: {
@@ -363,10 +364,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   includedText: {
-    color: '#10b981',
+    color: colors.success,
   },
   notIncludedText: {
-    color: '#ef4444',
+    color: colors.error,
   },
   compactGrid: {
     flexDirection: 'row',
@@ -374,18 +375,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   showMoreButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.inputBackground,
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   showMoreText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.grey,
     fontWeight: '500',
   },
-}); 
+});

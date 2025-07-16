@@ -9,14 +9,19 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 import { receiptService, PaymentHistory } from '../services/receiptService';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { notificationService } from '../services/notificationService';
+import { loggingService } from '../services/LoggingService';
 import { AppHeader } from '../components/AppHeader';
+import { RootStackParamList, ROUTES } from '../navigation/routes';
+
+type PaymentHistoryScreenNavigationProp = StackNavigationProp<RootStackParamList, typeof ROUTES.PAYMENT_HISTORY>;
 
 interface PaymentHistoryScreenProps {
-  navigation: any;
+  navigation: PaymentHistoryScreenNavigationProp;
 }
 
 export const PaymentHistoryScreen: React.FC<PaymentHistoryScreenProps> = ({ navigation }) => {
@@ -36,6 +41,11 @@ export const PaymentHistoryScreen: React.FC<PaymentHistoryScreenProps> = ({ navi
       const response = await receiptService.getPaymentHistory(1, 20);
       setPayments(response.payments);
     } catch (error) {
+      // Log the error details for debugging
+      loggingService.error('Failed to load payment history', error as Error, {
+        screen: 'PaymentHistoryScreen',
+        action: 'loadPaymentHistory'
+      });
       notificationService.error('Failed to load payment history');
     } finally {
       setLoading(false);
@@ -68,7 +78,7 @@ export const PaymentHistoryScreen: React.FC<PaymentHistoryScreenProps> = ({ navi
     }).format(amount);
   };
 
-  const getPaymentMethodIcon = (method: string) => {
+  const getPaymentMethodIcon = (method: string): keyof typeof Ionicons.glyphMap => {
     switch (method?.toLowerCase()) {
       case 'card':
         return 'card-outline';
@@ -114,12 +124,12 @@ export const PaymentHistoryScreen: React.FC<PaymentHistoryScreenProps> = ({ navi
         <View style={styles.detailRow}>
           <View style={styles.detailItem}>
             <Ionicons 
-              name={getPaymentMethodIcon(item.paymentMethod) as any} 
+              name={getPaymentMethodIcon(item.paymentMethod)} 
               size={16} 
               color={colors.lightGrey} 
             />
             <Text style={styles.detailText}>
-              {item.paymentMethod || 'Transfi'} • {formatDate(item.paymentDate)}
+              {item.paymentMethod || 'Transfer'} • {formatDate(item.paymentDate)}
             </Text>
           </View>
           <TouchableOpacity 
@@ -214,7 +224,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     padding: spacing.lg,
     marginBottom: spacing.md,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -316,4 +326,4 @@ const styles = StyleSheet.create({
     color: colors.lightGrey,
     lineHeight: 22,
   },
-}); 
+});

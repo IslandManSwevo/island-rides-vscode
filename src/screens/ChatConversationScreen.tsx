@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+// Alert is already imported in the react-native imports below
 import {
   View,
   Text,
@@ -20,25 +21,30 @@ import {
   IMessage, 
   User as GiftedChatUser, 
   Actions, 
-  Composer, 
   Send, 
   MessageImage,
   Bubble,
-  InputToolbar
+  InputToolbar,
+  ActionsProps,
+  SendProps,
+  BubbleProps,
+  InputToolbarProps,
+  MessageImageProps
 } from 'react-native-gifted-chat';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { RouteProp, useNavigation } from '@react-navigation/native';
+// Removed unused imports from @react-navigation/native
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack';
 
 import { ChatContext, ChatMessage, ConversationResponse } from '../types';
 import { RootStackParamList } from '../navigation/routes';
-import conversationService from '../services/conversationService';
+import { conversationService } from '../services/conversationService';
 import chatService from '../services/chatService';
+import { mediaUploadService } from '../services/mediaUploadService';
 import { AppHeader } from '../components/AppHeader';
 import { useAuth } from '../context/AuthContext';
-import { colors, spacing, borderRadius } from '../styles/theme';
+import { colors, spacing, borderRadius } from '../styles/Theme';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -108,7 +114,11 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
       const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-        console.warn('Camera/Library permissions not granted');
+        Alert.alert(
+          'Permissions Denied',
+          'Camera and/or media library permissions are required to share photos. Please enable them in your device settings.',
+          [{ text: 'OK' }]
+        );
       }
     } catch (error) {
       console.error('Error requesting permissions:', error);
@@ -322,7 +332,9 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
     }
 
     const message = newMessages[0];
-    if (!message?.text?.trim() && !message?.image && !message?.audio) return;
+    if (!message) return;
+    // Do not send empty messages
+    if (!message.text?.trim() && !message.image && !message.audio) return;
 
     try {
       // Optimistically update UI
@@ -331,7 +343,11 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
       );
 
       // Send via WebSocket
-      await chatService.sendMessage(message.text || '');
+      await chatService.sendMessage({
+        text: message.text || '',
+        image: message.image || undefined,
+        audio: message.audio || undefined,
+      });
       
       console.log('✅ Message sent successfully');
 
@@ -388,18 +404,29 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
             quality: 0.8,
           });
 
+            if (!result.canceled && result.assets[0]) {
+           };
       if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
-        
-        const message: IMessage = {
-          _id: Math.round(Math.random() * 1000000),
-          text: '',
-          createdAt: new Date(),
-          user: getCurrentUser(),
-          image: imageUri,
-        };
-        
-        onSend([message]);
+         const imageUri = result.assets[0].uri;        // Show a loading indicator while uploading
+        notificationService.info('Uploading image...', { duration: 0 });
+
+        try {
+          const imageUrl = await mediaUploadService.uploadImage(imageUri);
+          notificationService.clear();
+
+          const message: IMessage = {
+            _id: Math.round(Math.random() * 1000000),
+            text: '',
+            createdAt: new Date(),
+            user: getCurrentUser(),
+            image: imageUrl,
+          };
+          
+          onSend([message]);
+        } catch (uploadError) {
+          console.error('Image upload failed:', uploadError);
+          notificationService.error('Failed to upload image. Please try again.');
+        }
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -447,17 +474,28 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
       
       const uri = recording.getURI();
       setRecording(null);
-
+      
       if (uri) {
-        const message: IMessage = {
-          _id: Math.round(Math.random() * 1000000),
-          text: '',
-          createdAt: new Date(),
-          user: getCurrentUser(),
-          audio: uri,
-        };
-        
-        onSend([message]);
+        // Show a loading indicator while uploading
+        notificationService.info('Uploading audio...', { duration: 0 });
+
+        try {
+          const audioUrl = await mediaUploadService.uploadAudio(uri);
+          notificationService.clear();
+
+          const message: IMessage = {
+            _id: Math.round(Math.random() * 1000000),
+            text: '',
+            createdAt: new Date(),
+            user: getCurrentUser(),
+            audio: audioUrl,
+          };
+          
+          onSend([message]);
+        } catch (uploadError) {
+          console.error('Audio upload failed:', uploadError);
+          notificationService.error('Failed to upload audio. Please try again.');
+        }
       }
     } catch (error) {
       console.error('Failed to stop recording:', error);
@@ -486,13 +524,13 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   /**
    * Cleanup function
    */
-  const cleanup = () => {
+    const cleanup = async () => {
     console.log('🧹 Cleaning up chat screen...');
     
     try {
       chatService.disconnect();
       if (recording) {
-        recording.stopAndUnloadAsync();
+        await recording.stopAndUnloadAsync();
       }
     } catch (error) {
       console.error('❌ Error during cleanup:', error);
@@ -510,7 +548,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   /**
    * Custom Actions component
    */
-  const renderActions = (props: any) => (
+  const renderActions = (props: ActionsProps) => (
     <Actions
       {...props}
       options={{
@@ -525,14 +563,13 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
           <Ionicons name="add" size={24} color={colors.primary} />
         </View>
       )}
-      onSend={onSend}
     />
   );
 
   /**
    * Custom Send component
    */
-  const renderSend = (props: any) => (
+  const renderSend = (props: SendProps<IMessage>) => (
     <Send {...props}>
       <View style={styles.sendButton}>
         <Ionicons name="send" size={20} color={colors.primary} />
@@ -543,7 +580,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   /**
    * Custom Bubble component
    */
-  const renderBubble = (props: any) => (
+  const renderBubble = (props: BubbleProps<IMessage>) => (
     <Bubble
       {...props}
       wrapperStyle={{
@@ -551,15 +588,15 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
           backgroundColor: colors.primary,
         },
         left: {
-          backgroundColor: '#f0f0f0',
+          backgroundColor: colors.offWhite,
         },
       }}
       textStyle={{
         right: {
-          color: '#fff',
+          color: colors.white,
         },
         left: {
-          color: '#000',
+          color: colors.black,
         },
       }}
     />
@@ -568,7 +605,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   /**
    * Custom Input Toolbar
    */
-  const renderInputToolbar = (props: any) => (
+  const renderInputToolbar = (props: InputToolbarProps<IMessage>) => (
     <InputToolbar
       {...props}
       containerStyle={styles.inputToolbar}
@@ -579,10 +616,10 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   /**
    * Custom Message Image component
    */
-  const renderMessageImage = (props: any) => (
+  const renderMessageImage = (props: MessageImageProps<IMessage>) => (
     <TouchableOpacity
       onPress={() => {
-        setSelectedImage(props.currentMessage.image);
+        setSelectedImage(props.currentMessage.image || null);
         setShowImageViewer(true);
       }}
     >
@@ -600,7 +637,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   /**
    * Custom Message Audio component (simplified - no built-in audio player)
    */
-  const renderMessageAudio = (props: any) => (
+  const renderMessageAudio = (props: { currentMessage: IMessage }) => (
     <View style={styles.audioMessage}>
       <Ionicons name="play-circle" size={40} color={colors.primary} />
       <Text style={styles.audioText}>Voice Message</Text>
@@ -658,7 +695,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
           style={styles.imageViewerClose}
           onPress={() => setShowImageViewer(false)}
         >
-          <Ionicons name="close" size={30} color="#fff" />
+          <Ionicons name="close" size={30} color={colors.white} />
         </TouchableOpacity>
         
         {selectedImage && (
@@ -678,7 +715,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
         <AppHeader 
           title="Loading Chat..." 
           navigation={navigation}
@@ -701,7 +738,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
         <AppHeader 
           title="Chat Error" 
           navigation={navigation}
@@ -731,7 +768,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
           {connectionStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
         </Text>
         {connectionStatus === 'connecting' && (
-          <ActivityIndicator size="small" color="#fff" style={styles.connectionIndicator} />
+          <ActivityIndicator size="small" color={colors.white} style={styles.connectionIndicator} />
         )}
       </View>
     );
@@ -742,7 +779,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
    */
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
       
       <AppHeader 
         title={conversationData ? 
@@ -796,7 +833,7 @@ const ChatConversationScreen: React.FC<ChatConversationScreenProps> = ({ route, 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
   },
   loadingContainer: {
     flex: 1,
@@ -836,7 +873,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   retryButtonText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -849,7 +886,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   connectionStatusText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -873,7 +910,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   inputToolbar: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.offWhite,
     paddingVertical: spacing.xs,
@@ -881,11 +918,11 @@ const styles = StyleSheet.create({
   // Quick Replies Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   quickRepliesModal: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderTopLeftRadius: borderRadius.lg,
     borderTopRightRadius: borderRadius.lg,
     maxHeight: '70%',
@@ -921,7 +958,7 @@ const styles = StyleSheet.create({
   // Image Viewer Modal
   imageViewerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: colors.overlay + 'E6',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -953,11 +990,11 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     marginRight: spacing.sm,
   },
      recordingText: {
-     color: '#fff',
+     color: colors.white,
      fontSize: 14,
      fontWeight: '600',
    },

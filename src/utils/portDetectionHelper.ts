@@ -137,7 +137,7 @@ export class PortDetectionHelper {
       clearTimeout(timeoutId);
       
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json() as { status: string; uptime: number };
         console.log('✅ API Server: Connected successfully');
         console.log(`   Status: ${data.status}`);
         console.log(`   Uptime: ${data.uptime}`);
@@ -149,7 +149,14 @@ export class PortDetectionHelper {
       }
     } catch (error) {
       console.log('❌ API Server: Connection error');
-      console.log(`   Error: ${error}`);
+      if (error instanceof Error) {
+        console.log(`   Message: ${error.message}`);
+        if (error.stack) {
+          console.log(`   Stack: ${error.stack}`);
+        }
+      } else {
+        console.log(`   Error: ${String(error)}`);
+      }
       return false;
     }
   }
@@ -157,4 +164,4 @@ export class PortDetectionHelper {
 
 // Export helper functions for development use
 export const debugPortDetection = PortDetectionHelper.printDebugInfo;
-export const testConfiguration = PortDetectionHelper.testCurrentConfiguration; 
+export const testConfiguration = PortDetectionHelper.testCurrentConfiguration;

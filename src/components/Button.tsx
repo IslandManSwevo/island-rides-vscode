@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 
 interface ButtonProps {
   title: string;
@@ -8,14 +8,21 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   loading?: boolean;
+  // Accessibility props
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: 'button' | 'link' | 'text';
 }
 
-export const Button: React.FC<ButtonProps> = ({
+const Button: React.FC<ButtonProps> = ({
   title,
   onPress,
   variant = 'primary',
   disabled = false,
   loading = false,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityRole = 'button',
 }) => {
   return (
     <TouchableOpacity
@@ -26,6 +33,13 @@ export const Button: React.FC<ButtonProps> = ({
       ]}
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{
+        disabled: disabled || loading,
+        busy: loading,
+      }}
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors.white : colors.primary} />
@@ -40,6 +54,9 @@ export const Button: React.FC<ButtonProps> = ({
     </TouchableOpacity>
   );
 };
+
+// Wrap with React.memo for performance optimization
+export default React.memo(Button);
 
 const styles = StyleSheet.create({
   button: {

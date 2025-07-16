@@ -1,6 +1,5 @@
-import React from 'react';
 import { TextInput, Text, View, StyleSheet } from 'react-native';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 
 interface InputProps {
   label: string;
@@ -36,7 +35,7 @@ export const Input: React.FC<InputProps> = ({
         keyboardType={keyboardType}
         placeholderTextColor={colors.lightGrey}
       />
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text>}
     </View>
   );
 };
@@ -53,7 +52,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: colors.border,
     borderRadius: borderRadius.md,
     paddingVertical: 12,
     paddingHorizontal: spacing.md,

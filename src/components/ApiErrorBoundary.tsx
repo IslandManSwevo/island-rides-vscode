@@ -4,6 +4,8 @@ import { AuthError } from '../services/authService';
 import { ApiErrorCode, ErrorBoundaryProps } from '../types';
 import { apiService } from '../services/apiService';
 import { notificationService } from '../services/notificationService';
+import { navigationRef } from '../navigation/navigationRef';
+import { colors } from '../styles/Theme';
 
 interface State {
   hasError: boolean;
@@ -74,7 +76,7 @@ export class ApiErrorBoundary extends Component<ErrorBoundaryProps, State> {
   private async handleTokenRefresh(): Promise<void> {
     try {
       this.setState({ isRetrying: true });
-      await (apiService as any).refreshToken();
+      await apiService.refreshToken();
       // Reset error state to retry the failed request
       this.setState({ 
         hasError: false, 
@@ -89,10 +91,12 @@ export class ApiErrorBoundary extends Component<ErrorBoundaryProps, State> {
 
   private async redirectToLogin(): Promise<void> {
     // Clear auth state
-    await (apiService as any).clearToken();
+    await apiService.clearToken();
     
     // Use your navigation method here
-    // navigation.navigate('Login');
+    if (navigationRef.isReady()) {
+      navigationRef.navigate('Login' as never);
+    }
     
     // For now, just reset the error state
     this.setState({ 
@@ -175,16 +179,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
-    color: '#666',
+    color: colors.grey,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 5,
   },
   buttonText: {
-    color: '#FFF',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },

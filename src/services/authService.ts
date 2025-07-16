@@ -76,7 +76,7 @@ class AuthService extends BaseService {
       }
 
       // Check rate limiting
-      const rateLimit = this.checkRateLimit(credentials.email);
+      const rateLimit = await this.checkRateLimit(credentials.email);
       if (!rateLimit.allowed) {
         const waitSeconds = Math.ceil((rateLimit.waitTime || 0) / 1000);
         throw new AuthError(
@@ -88,11 +88,11 @@ class AuthService extends BaseService {
 
       const response = await apiService.postWithoutAuth<AuthResponse>('/api/auth/login', credentials);
       
-      if (!response.token) {
+      if (!response.token || !response.refreshToken) {
         throw new AuthError('No token received from server', 'NO_TOKEN', 500);
       }
       
-      await apiService.storeToken(response.token);
+      await apiService.storeToken(response.token, response.refreshToken);
       // Clear failed attempts on successful login
       if (credentials.email) {
         this.clearFailedAttempts(credentials.email);
@@ -130,8 +130,8 @@ class AuthService extends BaseService {
 
       const response = await apiService.postWithoutAuth<AuthResponse>('/api/auth/register', userData);
       
-      if (response.token) {
-        await apiService.storeToken(response.token);
+      if (response.token && response.refreshToken) {
+        await apiService.storeToken(response.token, response.refreshToken);
       }
       
       return response;
@@ -182,8 +182,8 @@ class AuthService extends BaseService {
       await this.waitForInitialization();
       const response = await apiService.post<AuthResponse>('/api/auth/refresh', {});
       
-      if (response.token) {
-        await apiService.storeToken(response.token);
+      if (response.token && response.refreshToken) {
+        await apiService.storeToken(response.token, response.refreshToken);
       }
       
       return response;
@@ -196,10 +196,9 @@ class AuthService extends BaseService {
   async refreshSession(): Promise<void> {
     try {
       const response = await this.refreshToken();
-      if (!response.token) {
+      if (!response.token || !response.refreshToken) {
         throw new BusinessLogicError('Failed to refresh session', 'SESSION_REFRESH_FAILED');
       }
-      await apiService.storeToken(response.token);
     } catch (error) {
       throw new BusinessLogicError(
         'Unable to refresh session',
@@ -237,34 +236,29 @@ class AuthService extends BaseService {
     }
   }
 
-  private checkRateLimit(identifier: string): { allowed: boolean; waitTime?: number } {
-    if (!this.failedAttempts.size) {
-      this.initializeFailedAttempts();
-    }
-
+  private async checkRateLimit(identifier: string): Promise<{ allowed: boolean; waitTime?: number }> {
     const attempts = this.failedAttempts.get(identifier);
     if (!attempts) return { allowed: true };
-    
+
     const timeSinceLastAttempt = Date.now() - attempts.lastAttempt.getTime();
-    const waitTime = Math.min(attempts.count * 5000, 60000); // 5 seconds per attempt, max 1 minute
-    
+    // Exponential backoff: 2^count * 1000ms, with a max of 1 minute and some jitter
+    const backoffTime = Math.min(Math.pow(2, attempts.count) * 1000, 60000);
+    const jitter = Math.random() * 1000; // Add up to 1s of jitter
+    const waitTime = backoffTime + jitter;
+
     if (timeSinceLastAttempt < waitTime) {
       return { allowed: false, waitTime: waitTime - timeSinceLastAttempt };
     }
-    
+
     // If enough time has passed, clear the attempts
     if (timeSinceLastAttempt > waitTime * 2) {
       this.clearFailedAttempts(identifier);
     }
-    
+
     return { allowed: true };
   }
 
   private async recordFailedAttempt(identifier: string): Promise<void> {
-    if (!this.failedAttempts.size) {
-      await this.initializeFailedAttempts();
-    }
-
     const existing = this.failedAttempts.get(identifier);
     
     if (existing) {
@@ -308,7 +302,7 @@ class AuthService extends BaseService {
       requireLowercase: true,
       requireNumbers: true,
       requireSpecialChars: true,
-      specialCharsPattern: /[!@#$%^&*(),.?":{}|<>]/,
+      specialCharsPattern: /[!@#$%^&*(),.?":{}|<>~`_+\-=\[\]\\';/]/,
       ...customRules
     };
 
@@ -343,7 +337,7 @@ class AuthService extends BaseService {
     if (/[A-Z]/.test(password)) score++;
     if (/[a-z]/.test(password)) score++;
     if (/\d/.test(password)) score++;
-    if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+    if (/[!@#$%^&*(),.?":{}|<>~`_+\-=\[\]\\';/]/.test(password)) score++;
     
     if (score <= 2) return 'weak';
     if (score <= 4) return 'medium';

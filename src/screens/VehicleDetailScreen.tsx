@@ -1,28 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
-import { Button } from '../components/Button';
-import { Vehicle } from '../types';
-import { apiService } from '../services/apiService';
-import { notificationService } from '../services/notificationService';
-import { FavoriteButton } from '../components/FavoriteButton';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
+import Button from '../components/Button';
+import { Vehicle, VehicleAmenity } from '../types';
 import { VehiclePhotoGallery } from '../components/VehiclePhotoGallery';
 import { VehicleFeatureList } from '../components/VehicleFeatureList';
 import { vehicleFeatureService } from '../services/vehicleFeatureService';
+import { VehicleHeader } from '../components/vehicle/VehicleHeader';
+import { VehicleSpecs } from '../components/vehicle/VehicleSpecs';
+import { VehicleReviews } from '../components/vehicle/VehicleReviews';
 
-interface Review {
-  id: number;
-  rating: number;
-  comment: string;
-  created_at: string;
-  user: {
-    first_name: string;
-    last_name: string;
-  };
+type RootStackParamList = {
+  VehicleDetail: { vehicle: Vehicle };
+  Checkout: { vehicle: Vehicle };
+};
+
+type VehicleDetailScreenNavigationProp = StackNavigationProp<RootStackParamList, 'VehicleDetail'>;
+type VehicleDetailScreenRouteProp = RouteProp<RootStackParamList, 'VehicleDetail'>;
+
+interface VehicleDetailScreenProps {
+  navigation: VehicleDetailScreenNavigationProp;
+  route: VehicleDetailScreenRouteProp;
 }
 
-export const VehicleDetailScreen = ({ navigation, route }: any) => {
+export const VehicleDetailScreen = ({ navigation, route }: VehicleDetailScreenProps) => {
   const { vehicle } = route.params;
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     specs: true,
@@ -41,34 +45,16 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
     'Automatic Transmission'
   ];
 
-  useEffect(() => {
-    fetchVehicleReviews();
-  }, []);
-
-  const fetchVehicleReviews = async () => {
-    try {
-      setLoadingReviews(true);
-      const response: any = await apiService.get(`/reviews/vehicle/${vehicle.id}`);
-      setReviews(response.reviews || []);
-      setAverageRating(response.averageRating || 0);
-    } catch (error: any) {
-      console.error('Error fetching reviews:', error);
-      notificationService.error('Failed to load reviews', { duration: 3000 });
-    } finally {
-      setLoadingReviews(false);
-    }
-  };
-
-  const handleBookNow = () => {
+  const handleBookNow = useCallback(() => {
     navigation.navigate('Checkout', { vehicle });
-  };
+  }, [navigation, vehicle]);
 
-  const toggleSection = (sectionName: string) => {
+  const toggleSection = useCallback((sectionName: string) => {
     setExpandedSections(prev => ({
       ...prev,
       [sectionName]: !prev[sectionName],
     }));
-  };
+  }, []);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -78,21 +64,7 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
     });
   };
 
-  const renderStars = (rating: number, size: number = 16) => {
-    return (
-      <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Ionicons
-            key={star}
-            name={star <= rating ? 'star' : 'star-outline'}
-            size={size}
-            color={star <= rating ? colors.warning : colors.lightGrey}
-            style={{ marginRight: 2 }}
-          />
-        ))}
-      </View>
-    );
-  };
+
 
   const renderVehicleSpecs = () => {
     if (!expandedSections.specs) return null;
@@ -111,7 +83,7 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
         
         {vehicle.deliveryAvailable && (
           <View style={styles.deliveryOption}>
-            <Ionicons name="car-outline" size={20} color="#10B981" />
+            <Ionicons name="car-outline" size={20} color={colors.verified} />
             <View style={styles.deliveryContent}>
               <Text style={styles.deliveryTitle}>Vehicle Delivery</Text>
               <Text style={styles.deliveryDescription}>
@@ -126,7 +98,7 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
 
         {vehicle.airportPickup && (
           <View style={styles.deliveryOption}>
-            <Ionicons name="airplane-outline" size={20} color="#3B82F6" />
+            <Ionicons name="airplane-outline" size={20} color={colors.info} />
             <View style={styles.deliveryContent}>
               <Text style={styles.deliveryTitle}>Airport Pickup</Text>
               <Text style={styles.deliveryDescription}>
@@ -145,12 +117,12 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
   const renderExpandableSection = (title: string, key: string, children: React.ReactNode, count?: number) => (
     <View style={styles.section}>
       <TouchableOpacity
-        style={styles.sectionHeader}
+        style={styles.detailRow}
         onPress={() => toggleSection(key)}
       >
         <Text style={styles.sectionTitle}>
           {title}
-          {count !== undefined && <Text style={styles.sectionCount}> ({count})</Text>}
+          {count !== undefined && <Text> ({count})</Text>}
         </Text>
         <Ionicons
           name={expandedSections[key] ? 'chevron-up' : 'chevron-down'}
@@ -163,70 +135,12 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
   );
 
   const renderReviewsSection = () => {
-    if (loadingReviews) {
-      return (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reviews</Text>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading reviews...</Text>
-          </View>
-        </View>
-      );
-    }
-
-    if (reviews.length === 0) {
-      return (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reviews</Text>
-          <View style={styles.emptyReviews}>
-            <Ionicons name="chatbubble-outline" size={48} color={colors.lightGrey} />
-            <Text style={styles.emptyReviewsText}>No reviews yet</Text>
-            <Text style={styles.emptyReviewsSubtext}>
-              Be the first to share your experience with this vehicle
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    const displayedReviews = showAllReviews ? reviews : reviews.slice(0, 2);
-
-    return (
-      <View style={styles.section}>
-        <View style={styles.reviewsHeader}>
-          <Text style={styles.sectionTitle}>Reviews</Text>
-          <View style={styles.ratingOverview}>
-            {renderStars(averageRating, 20)}
-            <Text style={styles.averageRating}>
-              {averageRating.toFixed(1)} ({reviews.length} review{reviews.length !== 1 ? 's' : ''})
-            </Text>
-          </View>
-        </View>
-
-        {displayedReviews.map(renderReviewItem)}
-
-        {reviews.length > 2 && (
-          <TouchableOpacity
-            style={styles.showMoreButton}
-            onPress={() => setShowAllReviews(!showAllReviews)}
-          >
-            <Text style={styles.showMoreText}>
-              {showAllReviews ? 'Show Less' : `View All ${reviews.length} Reviews`}
-            </Text>
-            <Ionicons
-              name={showAllReviews ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color={colors.primary}
-            />
-          </TouchableOpacity>
-        )}
-      </View>
-    );
+    return <VehicleReviews vehicleId={vehicle.id} />;
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView>
       {/* Photo Gallery */}
       {vehicle.photos && vehicle.photos.length > 0 ? (
         <VehiclePhotoGallery 
@@ -238,7 +152,7 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
       ) : (
         <View style={styles.galleryContainer}>
           <Image 
-            source={{ uri: `https://placehold.co/400x300/00B8D4/FFFFFF?text=${vehicle.make}+${vehicle.model}` }}
+            source={{ uri: `https://placehold.co/400x300/00B8D4/FFFFFF?text=${encodeURIComponent(vehicle.make)}+${encodeURIComponent(vehicle.model)}` }}
             style={styles.mainImage}
             resizeMode="cover"
           />
@@ -250,26 +164,7 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
 
       <View style={styles.infoContainer}>
         {/* Header Section */}
-        <View style={styles.headerRow}>
-          <Text style={styles.vehicleName}>
-            {vehicle.make} {vehicle.model}
-          </Text>
-          <View style={styles.headerActions}>
-            <FavoriteButton vehicleId={vehicle.id} size={24} style={styles.favoriteButton} />
-            <View style={[
-              styles.driveBadge,
-              (vehicle.driveSide || vehicle.drive_side) === 'LHD' ? styles.lhdBadge : styles.rhdBadge
-            ]}>
-              <Ionicons 
-                name="car-outline" 
-                size={16} 
-                color={colors.white} 
-                style={styles.badgeIcon}
-              />
-              <Text style={styles.badgeText}>{vehicle.driveSide || vehicle.drive_side}</Text>
-            </View>
-          </View>
-        </View>
+        <VehicleHeader vehicle={vehicle} />
 
         <Text style={styles.vehicleYear}>
           {vehicle.year} • {vehicle.vehicleType || 'Car'}
@@ -325,12 +220,12 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
             'Vehicle Amenities',
             'amenities',
             <View style={styles.amenitiesGrid}>
-              {vehicle.amenities.map((amenity: any, index: number) => (
+              {vehicle.amenities.map((amenity: VehicleAmenity, index: number) => (
                 <View key={amenity.id || index} style={styles.amenityItem}>
-                  <Text style={styles.amenityIcon}>{amenity.icon || '•'}</Text>
-                  <Text style={styles.amenityText}>{amenity.name}</Text>
-                  {amenity.isAvailable === false && (
-                    <Text style={styles.unavailableText}>(Not Available)</Text>
+                  <Text style={styles.amenityIcon}>•</Text>
+                  <Text style={styles.amenityText}>{amenity.amenityName}</Text>
+                  {!amenity.isStandard && (
+                    <Text style={styles.unavailableText}>(Additional Cost: ${amenity.additionalCost})</Text>
                   )}
                 </View>
               ))}
@@ -369,7 +264,7 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
                   <Text style={styles.safetyTitle}>Safety Features:</Text>
                   {vehicle.safetyFeatures.map((feature: string, index: number) => (
                     <View key={index} style={styles.safetyFeatureItem}>
-                      <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                      <Ionicons name="shield-checkmark" size={16} color={colors.verified} />
                       <Text style={styles.safetyFeatureText}>{feature}</Text>
                     </View>
                   ))}
@@ -391,7 +286,9 @@ export const VehicleDetailScreen = ({ navigation, route }: any) => {
           />
         </View>
       </View>
+
     </ScrollView>
+    </SafeAreaView>
   );
 };
 
@@ -411,7 +308,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: spacing.md,
     right: spacing.md,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: colors.overlay,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: borderRadius.sm,
@@ -424,19 +321,7 @@ const styles = StyleSheet.create({
   infoContainer: {
     padding: spacing.lg,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  favoriteButton: {
-    marginRight: spacing.sm,
-  },
+
   vehicleName: {
     ...typography.heading1,
     fontSize: 24,
@@ -454,7 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   rhdBadge: {
-    backgroundColor: '#E74C3C',
+    backgroundColor: colors.error,
   },
   badgeIcon: {
     marginRight: 4,
@@ -474,21 +359,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: spacing.md,
   },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: spacing.lg,
-  },
-  priceText: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  priceUnit: {
-    ...typography.body,
-    fontSize: 16,
-    marginLeft: spacing.xs,
-  },
+
   section: {
     marginBottom: spacing.lg,
   },
@@ -529,119 +400,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     alignItems: 'center',
   },
-  // Reviews styles
-  starsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reviewsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  ratingOverview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  averageRating: {
-    ...typography.body,
-    marginLeft: spacing.sm,
-    fontWeight: '600',
-  },
-  reviewItem: {
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  reviewUserInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  userAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.sm,
-  },
-  userInitial: {
-    color: colors.white,
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  userDetails: {
-    flex: 1,
-  },
-  userName: {
-    ...typography.body,
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  reviewDate: {
-    ...typography.body,
-    fontSize: 13,
-    color: colors.lightGrey,
-  },
-  reviewComment: {
-    ...typography.body,
-    lineHeight: 20,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  loadingText: {
-    ...typography.body,
-    marginLeft: spacing.sm,
-    color: colors.lightGrey,
-  },
-  emptyReviews: {
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  emptyReviewsText: {
-    ...typography.subheading,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    color: colors.lightGrey,
-  },
-  emptyReviewsSubtext: {
-    ...typography.body,
-    textAlign: 'center',
-    color: colors.lightGrey,
-    lineHeight: 20,
-  },
-  showMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.md,
-    marginTop: spacing.sm,
-  },
-  showMoreText: {
-    ...typography.body,
-    color: colors.primary,
-    fontWeight: '600',
-    marginRight: spacing.xs,
-  },
+
   specsGrid: {
     gap: spacing.sm,
   },
@@ -659,75 +418,20 @@ const styles = StyleSheet.create({
   specValue: {
     ...typography.body,
   },
-  conditionSection: {
-    marginBottom: spacing.lg,
-  },
-  conditionTitle: {
-    ...typography.subheading,
-    marginBottom: spacing.sm,
-  },
-  conditionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  conditionText: {
-    ...typography.body,
-    marginLeft: spacing.sm,
-  },
-  inspectionText: {
-    ...typography.body,
-    marginLeft: spacing.sm,
-    color: colors.lightGrey,
-  },
-  verificationSection: {
-    marginBottom: spacing.lg,
-  },
-  verificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  verificationText: {
-    ...typography.body,
-    marginLeft: spacing.sm,
-    fontWeight: '600',
-  },
-  verificationNotes: {
-    ...typography.body,
-    marginTop: spacing.sm,
-    color: colors.lightGrey,
-  },
-  pricingSection: {
-    marginBottom: spacing.lg,
-  },
-  priceItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  priceLabel: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-  priceValue: {
-    ...typography.body,
-  },
-  rentalNote: {
-    ...typography.body,
-    marginTop: spacing.sm,
-    color: colors.lightGrey,
-  },
+
+
+
   deliverySection: {
     marginBottom: spacing.lg,
   },
   deliveryOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   deliveryContent: {
     flex: 1,
+    marginLeft: spacing.sm,
   },
   deliveryTitle: {
     ...typography.body,
@@ -736,16 +440,7 @@ const styles = StyleSheet.create({
   deliveryDescription: {
     ...typography.body,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.md,
-  },
-  sectionCount: {
-    ...typography.body,
-    fontWeight: '600',
-  },
+
   amenitiesGrid: {
     gap: spacing.sm,
   },

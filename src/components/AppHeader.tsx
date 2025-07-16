@@ -2,16 +2,18 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { colors, typography, spacing } from '../styles/theme';
+import { colors, typography, spacing } from '../styles/Theme';
 import { NavigationProp } from '@react-navigation/native';
 import { BusinessLogicError } from '../services/errors/BusinessLogicError';
+import { RootStackParamList } from '../navigation/routes';
 
 interface AppHeaderProps {
   title: string;
-  navigation: NavigationProp<any>;
+  navigation: NavigationProp<RootStackParamList>;
   showBackButton?: boolean;
   onBackPress?: () => void;
   showProfileButton?: boolean;
+  rightComponent?: React.ReactNode;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -19,7 +21,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   navigation,
   showBackButton = false,
   onBackPress,
-  showProfileButton = true
+  showProfileButton = true,
+  rightComponent
 }) => {
   const { logout } = useAuth();
 
@@ -71,22 +74,28 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       </View>
 
       <View style={styles.rightSection}>
-        {showProfileButton && (
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('Profile')} 
-            style={styles.iconButton}
-            accessibilityLabel="Profile"
-          >
-            <MaterialIcons name="person" size={24} color={colors.white} />
-          </TouchableOpacity>
+        {rightComponent ? (
+          rightComponent
+        ) : (
+          <>
+            {showProfileButton && (
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('Profile')} 
+                style={styles.iconButton}
+                accessibilityLabel="Profile"
+              >
+                <MaterialIcons name="person" size={24} color={colors.white} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              onPress={handleLogout} 
+              style={styles.iconButton}
+              accessibilityLabel="Logout"
+            >
+              <MaterialIcons name="logout" size={24} color={colors.white} />
+            </TouchableOpacity>
+          </>
         )}
-        <TouchableOpacity 
-          onPress={handleLogout} 
-          style={styles.iconButton}
-          accessibilityLabel="Logout"
-        >
-          <MaterialIcons name="logout" size={24} color={colors.white} />
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -97,7 +106,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingTop: 48, // Account for status bar
@@ -121,7 +130,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: colors.white,
   },
   profileButton: {
     padding: 8,
@@ -131,7 +140,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   logoutText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 14,
     marginLeft: 4,
     fontWeight: '600',

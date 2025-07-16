@@ -1,4 +1,5 @@
 import { apiService } from './apiService';
+import { authService } from './authService';
 import { notificationService } from './notificationService';
 import { storageService } from './storageService';
 import { navigationRef } from '../navigation/navigationRef';
@@ -36,6 +37,7 @@ class ReviewPromptService {
   private readonly MAX_REMINDERS = 3;
   private readonly PROMPT_DELAY_HOURS = 2; // Hours after booking completion to send first prompt
   private readonly REMINDER_INTERVAL_DAYS = 3; // Days between reminder prompts
+  private processingInterval: NodeJS.Timeout | undefined;
 
   /**
    * Schedule a review prompt for a completed booking
@@ -46,10 +48,17 @@ class ReviewPromptService {
       const promptDate = new Date();
       promptDate.setHours(promptDate.getHours() + this.PROMPT_DELAY_HOURS);
 
+      // Get current user ID from auth service
+      const currentUser = await authService.getCurrentUser();
+      if (!currentUser) {
+        console.error('Cannot schedule review prompt: No authenticated user');
+        return;
+      }
+
       const reviewPrompt: ReviewPrompt = {
         id: promptId,
         bookingId: booking.id,
-        userId: 0, // Will be set by current user
+        userId: currentUser.id,
         vehicleId: booking.vehicle.id,
         promptDate: promptDate.toISOString(),
         status: 'pending',
@@ -284,13 +293,24 @@ class ReviewPromptService {
       await this.processPendingPrompts();
 
       // Set up periodic checking (every hour)
-      setInterval(() => {
+      this.processingInterval = setInterval(() => {
         this.processPendingPrompts();
       }, 60 * 60 * 1000); // 1 hour
 
       console.log('📝 Review prompt service initialized');
     } catch (error) {
       console.error('Failed to initialize review prompt service:', error);
+    }
+  }
+
+  /**
+   * Cleanup method to clear the processing interval
+   */
+  cleanup(): void {
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval);
+      this.processingInterval = undefined;
+      console.log('📝 Review prompt service cleanup completed');
     }
   }
 
@@ -362,7 +382,10 @@ class ReviewPromptService {
   private async getBookingDetails(bookingId: number): Promise<BookingForReview | null> {
     try {
       const response = await apiService.get<{ booking: BookingForReview }>(`/bookings/${bookingId}`);
-      return response.booking;
+      if (response && response.booking) {
+        return response.booking;
+      }
+      return null;
     } catch (error) {
       console.error(`Failed to get booking details for ${bookingId}:`, error);
       return null;
@@ -371,7 +394,19 @@ class ReviewPromptService {
 
   private navigateToWriteReview(booking: BookingForReview): void {
     if (navigationRef.current) {
-      (navigationRef.current as any).navigate(ROUTES.WRITE_REVIEW, { booking });
+      // Map BookingForReview to the expected BookingInfo format
+      const mappedBooking = {
+        id: booking.id,
+        start_date: booking.startDate,
+        end_date: booking.endDate,
+        vehicle: {
+          id: booking.vehicle.id,
+          make: booking.vehicle.make,
+          model: booking.vehicle.model,
+          year: booking.vehicle.year
+        }
+      };
+      navigationRef.current.navigate(ROUTES.WRITE_REVIEW, { booking: mappedBooking });
     }
   }
 

@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import * as yup from 'yup';
 import { notificationService } from '../services/notificationService';
-import { Button } from '../components/Button';
+import Button from '../components/Button';
 import { Input } from '../components/Input';
 import { useAuth } from '../context/AuthContext';
-import { colors, typography, spacing } from '../styles/theme';
+import { colors, typography, spacing } from '../styles/Theme';
+import { RootStackParamList, ROUTES } from '../navigation/routes';
+
+type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, typeof ROUTES.LOGIN>;
 
 interface LoginScreenProps {
-  navigation: any;
+  navigation: LoginScreenNavigationProp;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
@@ -16,23 +21,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [formErrors, setFormErrors] = useState<{ email?: string; password?: string }>({});
 
-  const validateForm = () => {
-    const newErrors: { email?: string; password?: string } = {};
-    
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
-    }
-    
-    if (!password) {
-      newErrors.password = 'Password is required';
+  const loginSchema = yup.object().shape({
+    email: yup.string().email('Please enter a valid email').required('Email is required'),
+    password: yup.string().required('Password is required'),
+  });
+
+  const validateForm = async () => {
+    try {
+      await loginSchema.validate({ email, password }, { abortEarly: false });
+      setFormErrors({});
+      return true;
+    } catch (err) {
+      if (err instanceof yup.ValidationError) {
+        const errors = err.inner.reduce((acc, current) => {
+          return { ...acc, [current.path!]: current.message };
+        }, {});
+        setFormErrors(errors);
+      }
+      return false;
     }
   };
 
   const handleLogin = async () => {
     Keyboard.dismiss();
-    if (!validateForm()) return;
+    const isValid = await validateForm();
+    if (!isValid) return;
 
     // Clear any previous errors
     clearError();
@@ -119,13 +132,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   errorContainer: {
-    backgroundColor: '#ffebee',
+    backgroundColor: colors.error + '20',
     padding: spacing.md,
     borderRadius: 8,
     marginBottom: spacing.md,
   },
   errorText: {
-    color: '#c62828',
+    color: colors.error,
     textAlign: 'center',
     fontSize: 14,
   },

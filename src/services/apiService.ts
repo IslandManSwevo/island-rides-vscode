@@ -1,9 +1,11 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, AxiosError, AxiosRequestConfig } from 'axios';
 import { BaseService } from './base/BaseService';
 import { storageService } from './storageService';
 import { getEnvironmentConfig } from '../config/environment';
 
-const TOKEN_KEY = 'user_jwt_token';
+interface RetryableAxiosRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}
 
 interface ApiErrorResponse {
   message: string;
@@ -58,7 +60,7 @@ export class ApiService extends BaseService {
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as any;
+        const originalRequest = error.config as RetryableAxiosRequestConfig;
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
@@ -69,6 +71,9 @@ export class ApiService extends BaseService {
             const newToken = await this.getToken();
             
             if (newToken && originalRequest) {
+              if (!originalRequest.headers) {
+                originalRequest.headers = {};
+              }
               originalRequest.headers.Authorization = `Bearer ${newToken}`;
               return this.axiosInstance(originalRequest);
             }
@@ -115,9 +120,23 @@ export class ApiService extends BaseService {
     };
   }
 
+  public isAxiosError(error: unknown): error is AxiosError<ApiErrorResponse> {
+    return axios.isAxiosError(error);
+  }
+
   async get<T>(endpoint: string, params?: object): Promise<T> {
     await this.waitForInitialization();
     const response = await this.axiosInstance.get(endpoint, { params });
+    return response.data;
+  }
+
+  async uploadFile<T>(endpoint: string, formData: FormData): Promise<T> {
+    await this.waitForInitialization();
+    const response = await this.axiosInstance.post(endpoint, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   }
 
@@ -146,12 +165,13 @@ export class ApiService extends BaseService {
   }
 
   // Token management methods
-  async storeToken(token: string): Promise<void> {
+  async storeToken(accessToken: string, refreshToken: string): Promise<void> {
     try {
-      await storageService.setAuthToken(token);
+      await storageService.setAuthToken(accessToken);
+      await storageService.setRefreshToken(refreshToken);
     } catch (error) {
-      console.error('Failed to store token:', error);
-      throw new Error('Failed to store authentication token');
+      console.error('Failed to store tokens:', error);
+      throw new Error('Failed to store authentication tokens');
     }
   }
 
@@ -167,33 +187,44 @@ export class ApiService extends BaseService {
   async clearToken(): Promise<void> {
     try {
       await storageService.clearAuthToken();
+      await storageService.clearRefreshToken();
     } catch (error) {
-      console.warn('Failed to clear token:', error);
+      console.warn('Failed to clear tokens:', error);
     }
   }
 
   async refreshToken(): Promise<void> {
     await this.waitForInitialization();
-    const token = await this.getToken();
-    if (!token) {
-      throw new Error('No token available for refresh');
+    const refreshToken = await storageService.getRefreshToken();
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
     }
 
     try {
       const response = await this.axiosInstanceWithoutAuth.post('/api/auth/refresh', {
-        token,
+        refreshToken,
       });
       
-      if (response.data?.token) {
-        await this.storeToken(response.data.token);
+      const { accessToken, refreshToken: newRefreshToken } = response.data;
+
+      if (accessToken && newRefreshToken) {
+        await this.storeToken(accessToken, newRefreshToken);
       } else {
-        throw new Error('No token in refresh response');
+        throw new Error('Invalid token refresh response');
       }
     } catch (error) {
       console.error('Token refresh failed:', error);
       await this.clearToken();
       throw error;
     }
+  }
+
+  async getAuthToken(): Promise<string | null> {
+    return await this.getToken();
+  }
+
+  get baseURL(): string {
+    return this.axiosInstance?.defaults?.baseURL || '';
   }
 }
 

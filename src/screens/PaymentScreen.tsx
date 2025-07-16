@@ -8,48 +8,19 @@ import {
   ActivityIndicator,
   Linking
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { StackScreenProps } from '@react-navigation/stack';
 import { apiService } from '../services/apiService';
 import { notificationService } from '../services/notificationService';
-import { colors, typography, spacing } from '../styles/theme';
-
-interface PaymentMethod {
-  id: string;
-  name: string;
-  icon: string;
-  processingTime: string;
-}
-
-interface PaymentMethodsResponse {
-  methods: PaymentMethod[];
-}
-
-interface PaymentIntentResponse {
-  paymentUrl?: string;
-  instructions?: any;
-  reference?: string;
-  walletAddress?: string;
-  amount?: number;
-  currency?: string;
-  qrCode?: string;
-}
-
-type RootStackParamList = {
-  Payment: {
-    booking: {
-      id: number;
-      total_amount: number;
-      start_date: string;
-      end_date: string;
-      vehicle: any;
-    };
-  };
-  BookingConfirmed: { booking: any };
-  BankTransferInstructions: any;
-  CryptoPayment: any;
-};
+import { colors, typography, spacing } from '../styles/Theme';
+import {
+  IconName,
+  PaymentMethod,
+  PaymentMethodsResponse,
+  PaymentIntentResponse
+} from '../types/payment';
+import { RootStackParamList } from '../navigation/routes';
 
 type PaymentScreenProps = StackScreenProps<RootStackParamList, 'Payment'>;
 
@@ -69,6 +40,9 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation 
       const response = await apiService.get<PaymentMethodsResponse>('/payments/methods');
       setPaymentMethods(response.methods);
     } catch (error) {
+      notificationService.error('Failed to load payment methods. Please try again later.', {
+        duration: 5000
+      });
       console.error('Error fetching payment methods:', error);
     }
   };
@@ -83,21 +57,37 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation 
         paymentMethod: methodId
       });
 
-      if (methodId === 'card' && response.paymentUrl) {
-        setPaymentUrl(response.paymentUrl);
+      if (methodId === 'card' && (response as any).paymentUrl) {
+        setPaymentUrl((response as any).paymentUrl);
+      } else if (methodId === 'paypal' && (response as any).paymentUrl) {
+        // Open PayPal payment URL in external browser
+        Linking.openURL((response as any).paymentUrl).catch(err => {
+          console.error('Failed to open PayPal URL:', err);
+          notificationService.error('Failed to open PayPal payment', {
+            duration: 3000
+          });
+        });
       } else if (methodId === 'bank_transfer') {
         navigation.navigate('BankTransferInstructions', {
-          instructions: response.instructions,
-          reference: response.reference,
-          booking
+          instructions: (response as any).instructions,
+          reference: (response as any).reference,
+          booking: {
+            ...booking,
+            start_date: booking.startDate,
+            end_date: booking.endDate
+          }
         });
       } else if (methodId === 'crypto') {
         navigation.navigate('CryptoPayment', {
-          walletAddress: response.walletAddress,
-          amount: response.amount,
-          currency: response.currency,
-          qrCode: response.qrCode,
-          booking
+          walletAddress: (response as any).walletAddress,
+          amount: (response as any).amount,
+          currency: (response as any).currency,
+          qrCode: (response as any).qrCode,
+          booking: {
+            ...booking,
+            start_date: booking.startDate,
+            end_date: booking.endDate
+          }
         });
       }
     } catch (error) {
@@ -109,12 +99,44 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation 
     }
   };
 
-  const handleWebViewNavigationChange = (navState: any) => {
+  const handleWebViewNavigationChange = (navState: WebViewNavigation) => {
     if (navState.url.includes('/booking-confirmed')) {
       notificationService.success('Payment successful!', {
         duration: 5000
       });
-      navigation.navigate('BookingConfirmed', { booking });
+      
+      // Transform booking to match BookingConfirmed route expectations
+      const transformedBooking = {
+        id: booking.id,
+        start_date: booking.startDate,
+        end_date: booking.endDate,
+        status: booking.status,
+        total_amount: booking.totalAmount,
+        vehicle: {
+          id: booking.vehicle.id,
+          make: booking.vehicle.make,
+          model: booking.vehicle.model,
+          year: booking.vehicle.year,
+          location: booking.vehicle.location,
+          daily_rate: booking.vehicle.dailyRate
+        }
+      };
+      
+      navigation.navigate('BookingConfirmed', { 
+        booking: transformedBooking,
+        vehicle: {
+          id: booking.vehicle.id,
+          make: booking.vehicle.make,
+          model: booking.vehicle.model,
+          year: booking.vehicle.year,
+          ownerId: 0, // Default value as it's not available in booking.vehicle
+          location: booking.vehicle.location,
+          dailyRate: booking.vehicle.dailyRate,
+          available: true, // Default value
+          driveSide: 'LHD' as const, // Default value
+          createdAt: new Date().toISOString() // Default value
+        }
+      });
     } else if (navState.url.includes('/checkout') && navState.canGoBack) {
       setPaymentUrl(null);
       notificationService.info('Payment cancelled', {
@@ -161,12 +183,12 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation 
       <View style={styles.summary}>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Total Amount</Text>
-          <Text style={styles.summaryValue}>${booking.total_amount} USD</Text>
+          <Text style={styles.summaryValue}>${booking.totalAmount} USD</Text>
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Rental Period</Text>
           <Text style={styles.summaryValue}>
-            {new Date(booking.start_date).toLocaleDateString()} - {new Date(booking.end_date).toLocaleDateString()}
+            {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
           </Text>
         </View>
       </View>
@@ -183,7 +205,7 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({ route, navigation 
             disabled={loading}
           >
             <Ionicons 
-              name={method.icon as any} 
+              name={method.icon as IconName} 
               size={32} 
               color={selectedMethod === method.id ? colors.primary : colors.darkGrey} 
             />
@@ -304,4 +326,4 @@ const styles = StyleSheet.create({
     color: colors.lightGrey,
     marginLeft: spacing.sm,
   },
-}); 
+});

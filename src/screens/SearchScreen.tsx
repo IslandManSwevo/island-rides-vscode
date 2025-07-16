@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,18 +12,34 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RouteProp } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
-import { Button } from '../components/Button';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
+import Button from '../components/Button';
 import { VehicleCard } from '../components/VehicleCard';
 import { vehicleService } from '../services/vehicleService';
 import { notificationService } from '../services/notificationService';
 import { vehicleFeatureService } from '../services/vehicleFeatureService';
 import { Island, VehicleRecommendation, VehicleFeature, VehicleFeatureCategory } from '../types';
+import DateFilter from '../components/DateFilter';
+import PriceRangeFilter from '../components/PriceRangeFilter';
+import OptionFilter from '../components/OptionFilter';
+import SeatingCapacityFilter from '../components/SeatingCapacityFilter';
+import ConditionRatingFilter from '../components/ConditionRatingFilter';
+import VerificationStatusFilter from '../components/VerificationStatusFilter';
+import FeaturesFilter from '../components/FeaturesFilter';
+import ServiceOptionsFilter from '../components/ServiceOptionsFilter';
+import { VEHICLE_TYPES, FUEL_TYPES, TRANSMISSION_TYPES, VERIFICATION_STATUS_OPTIONS, SORT_OPTIONS } from '../constants/filters';
+import { islands } from '../constants/islands';
+import { RootStackParamList, ROUTES } from '../navigation/routes';
+
+type SearchScreenNavigationProp = StackNavigationProp<RootStackParamList, typeof ROUTES.SEARCH>;
+type SearchScreenRouteProp = RouteProp<RootStackParamList, typeof ROUTES.SEARCH>;
 
 interface SearchScreenProps {
-  navigation: any;
-  route: any;
+  navigation: SearchScreenNavigationProp;
+  route: SearchScreenRouteProp;
 }
 
 interface SearchFilters {
@@ -36,17 +53,17 @@ interface SearchFilters {
   minSeatingCapacity: number;
   features: number[]; // Feature IDs
   minConditionRating: number;
-  verificationStatus: string[];
+  verificationStatus: ('pending' | 'verified' | 'rejected' | 'expired')[];
   deliveryAvailable: boolean;
   airportPickup: boolean;
   sortBy: 'popularity' | 'price_low' | 'price_high' | 'rating' | 'newest' | 'condition';
 }
 
 export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route }) => {
-  const { island } = route.params || {};
+  const { island } = (route.params as any) || {};
   
   const [filters, setFilters] = useState<SearchFilters>({
-    island: island || '',
+    island: island || 'Freeport', // Default to Grand Bahama (Freeport) as per Story 1.2
     startDate: null,
     endDate: null,
     priceRange: [50, 300],
@@ -61,6 +78,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
     airportPickup: false,
     sortBy: 'popularity'
   });
+
+  const [showAllIslands, setShowAllIslands] = useState(false);
+  const [showIslandSelector, setShowIslandSelector] = useState(false);
 
   const [searchResults, setSearchResults] = useState<VehicleRecommendation[]>([]);
   const [loading, setLoading] = useState(false);
@@ -104,7 +124,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
       setHasSearched(true);
 
       const searchParams = {
-        location: filters.island,
+        location: showAllIslands ? undefined : filters.island, // Only filter by island if not showing all
         vehicleType: filters.vehicleTypes.length > 0 ? filters.vehicleTypes.join(',') : undefined,
         fuelType: filters.fuelTypes.length > 0 ? filters.fuelTypes.join(',') : undefined,
         transmissionType: filters.transmissionTypes.length > 0 ? filters.transmissionTypes.join(',') : undefined,
@@ -134,7 +154,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
           duration: 4000
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Search error:', error);
       notificationService.error('Failed to search vehicles', {
         duration: 4000,
@@ -152,13 +172,16 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const toggleArrayFilter = (key: 'vehicleTypes' | 'fuelTypes' | 'transmissionTypes' | 'verificationStatus', value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: prev[key].includes(value)
-        ? prev[key].filter(item => item !== value)
-        : [...prev[key], value]
-    }));
+  const toggleArrayFilter = (key: string, value: string) => {
+    setFilters(prev => {
+      const currentArray = prev[key as keyof SearchFilters] as string[];
+      return {
+        ...prev,
+        [key]: currentArray.includes(value)
+          ? currentArray.filter(item => item !== value)
+          : [...currentArray, value]
+      };
+    });
   };
 
   const toggleFeature = (featureId: number) => {
@@ -172,7 +195,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
 
   const clearFilters = () => {
     setFilters({
-      island: island || '',
+      island: island || 'Freeport', // Default to Grand Bahama (Freeport)
       startDate: null,
       endDate: null,
       priceRange: [50, 300],
@@ -187,6 +210,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
       airportPickup: false,
       sortBy: 'popularity'
     });
+    setShowAllIslands(false);
   };
 
   const handleDateChange = (event: any, selectedDate: Date | undefined, type: 'start' | 'end') => {
@@ -208,298 +232,59 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
   const renderFilterSection = () => (
     <View style={styles.filtersContainer}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Date Selection */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>Rental Dates</Text>
-          <View style={styles.dateRow}>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker('start')}
-            >
-              <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-              <Text style={styles.dateButtonText}>{formatDate(filters.startDate)}</Text>
-            </TouchableOpacity>
-            <Text style={styles.dateArrow}>→</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker('end')}
-            >
-              <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-              <Text style={styles.dateButtonText}>{formatDate(filters.endDate)}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Price Range */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>
-            Price Range: ${filters.priceRange[0]} - ${filters.priceRange[1]}/day
-          </Text>
-          <View style={styles.priceRangeContainer}>
-            <Text style={styles.priceLabel}>${filters.priceRange[0]}</Text>
-            <View style={styles.priceSliderContainer}>
-              {/* Simple price adjustment buttons - in a real app, use a proper slider */}
-              <TouchableOpacity
-                style={styles.priceButton}
-                onPress={() => updateFilter('priceRange', [Math.max(25, filters.priceRange[0] - 25), filters.priceRange[1]])}
-              >
-                <Ionicons name="remove" size={16} color={colors.primary} />
-              </TouchableOpacity>
-              <View style={styles.priceBar} />
-              <TouchableOpacity
-                style={styles.priceButton}
-                onPress={() => updateFilter('priceRange', [filters.priceRange[0], Math.min(500, filters.priceRange[1] + 25)])}
-              >
-                <Ionicons name="add" size={16} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.priceLabel}>${filters.priceRange[1]}</Text>
-          </View>
-        </View>
-
-        {/* Vehicle Types */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>Vehicle Type</Text>
-          <View style={styles.optionsGrid}>
-            {VEHICLE_TYPES.map(type => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.optionChip,
-                  filters.vehicleTypes.includes(type) && styles.optionChipSelected
-                ]}
-                onPress={() => toggleArrayFilter('vehicleTypes', type)}
-              >
-                <Text style={[
-                  styles.optionChipText,
-                  filters.vehicleTypes.includes(type) && styles.optionChipTextSelected
-                ]}>
-                  {type}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Fuel Types */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>Fuel Type</Text>
-          <View style={styles.optionsGrid}>
-            {FUEL_TYPES.map(type => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.optionChip,
-                  filters.fuelTypes.includes(type) && styles.optionChipSelected
-                ]}
-                onPress={() => toggleArrayFilter('fuelTypes', type)}
-              >
-                <Text style={[
-                  styles.optionChipText,
-                  filters.fuelTypes.includes(type) && styles.optionChipTextSelected
-                ]}>
-                  {type}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Transmission Types */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>Transmission Type</Text>
-          <View style={styles.optionsGrid}>
-            {TRANSMISSION_TYPES.map(type => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.optionChip,
-                  filters.transmissionTypes.includes(type) && styles.optionChipSelected
-                ]}
-                onPress={() => toggleArrayFilter('transmissionTypes', type)}
-              >
-                <Text style={[
-                  styles.optionChipText,
-                  filters.transmissionTypes.includes(type) && styles.optionChipTextSelected
-                ]}>
-                  {type}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-                 {/* Seating Capacity */}
-         <View style={styles.filterSection}>
-           <Text style={styles.filterTitle}>
-             Minimum Seating: {filters.minSeatingCapacity} passenger{filters.minSeatingCapacity !== 1 ? 's' : ''}
-           </Text>
-           <View style={styles.sliderContainer}>
-             <TouchableOpacity
-               style={styles.sliderButton}
-               onPress={() => updateFilter('minSeatingCapacity', Math.max(1, filters.minSeatingCapacity - 1))}
-             >
-               <Ionicons name="remove" size={16} color={colors.primary} />
-             </TouchableOpacity>
-             <View style={styles.sliderTrack}>
-               <View 
-                 style={[styles.sliderProgress, { width: `${(filters.minSeatingCapacity - 1) * 14.28}%` }]} 
-               />
-             </View>
-             <TouchableOpacity
-               style={styles.sliderButton}
-               onPress={() => updateFilter('minSeatingCapacity', Math.min(8, filters.minSeatingCapacity + 1))}
-             >
-               <Ionicons name="add" size={16} color={colors.primary} />
-             </TouchableOpacity>
-           </View>
-         </View>
-
-         {/* Condition Rating */}
-         <View style={styles.filterSection}>
-           <Text style={styles.filterTitle}>
-             Minimum Condition Rating: {filters.minConditionRating} star{filters.minConditionRating !== 1 ? 's' : ''}
-           </Text>
-           <View style={styles.ratingContainer}>
-             {[1, 2, 3, 4, 5].map(rating => (
-               <TouchableOpacity
-                 key={rating}
-                 style={styles.starButton}
-                 onPress={() => updateFilter('minConditionRating', rating)}
-               >
-                 <Ionicons
-                   name={rating <= filters.minConditionRating ? 'star' : 'star-outline'}
-                   size={24}
-                   color={rating <= filters.minConditionRating ? '#F59E0B' : colors.lightGrey}
-                 />
-               </TouchableOpacity>
-             ))}
-           </View>
-         </View>
-
-         {/* Verification Status */}
-         <View style={styles.filterSection}>
-           <Text style={styles.filterTitle}>Verification Status</Text>
-           <View style={styles.optionsGrid}>
-             {VERIFICATION_STATUS_OPTIONS.map(option => (
-               <TouchableOpacity
-                 key={option.key}
-                 style={[
-                   styles.verificationChip,
-                   filters.verificationStatus.includes(option.key) && styles.verificationChipSelected
-                 ]}
-                 onPress={() => toggleArrayFilter('verificationStatus', option.key)}
-               >
-                 <Ionicons 
-                   name={option.icon as any} 
-                   size={16} 
-                   color={filters.verificationStatus.includes(option.key) ? colors.white : colors.primary} 
-                 />
-                 <Text style={[
-                   styles.verificationChipText,
-                   filters.verificationStatus.includes(option.key) && styles.verificationChipTextSelected
-                 ]}>
-                   {option.label}
-                 </Text>
-               </TouchableOpacity>
-             ))}
-           </View>
-         </View>
-
-         {/* Features */}
-         {!loadingFeatures && availableFeatures.length > 0 && (
-           <View style={styles.filterSection}>
-             <Text style={styles.filterTitle}>
-               Features ({filters.features.length} selected)
-             </Text>
-             <ScrollView 
-               style={styles.featuresScrollView}
-               showsVerticalScrollIndicator={false}
-               nestedScrollEnabled
-             >
-               {featureCategories.map(category => {
-                 const categoryFeatures = availableFeatures.filter(f => f.categoryId === category.id);
-                 if (categoryFeatures.length === 0) return null;
-                 
-                 return (
-                   <View key={category.id} style={styles.featureCategorySection}>
-                     <Text style={styles.featureCategoryTitle}>{category.name}</Text>
-                     <View style={styles.featuresGrid}>
-                       {categoryFeatures.map(feature => (
-                         <TouchableOpacity
-                           key={feature.id}
-                           style={[
-                             styles.featureChip,
-                             filters.features.includes(feature.id) && styles.featureChipSelected
-                           ]}
-                           onPress={() => toggleFeature(feature.id)}
-                         >
-                           <Text style={[
-                             styles.featureChipText,
-                             filters.features.includes(feature.id) && styles.featureChipTextSelected
-                           ]}>
-                             {feature.name}
-                           </Text>
-                           {feature.isPremium && (
-                             <View style={styles.premiumBadge}>
-                               <Text style={styles.premiumBadgeText}>★</Text>
-                             </View>
-                           )}
-                         </TouchableOpacity>
-                       ))}
-                     </View>
-                   </View>
-                 );
-               })}
-             </ScrollView>
-           </View>
-         )}
-
-         {/* Service Options */}
-         <View style={styles.filterSection}>
-           <Text style={styles.filterTitle}>Service Options</Text>
-           <View style={styles.serviceOptionsContainer}>
-             <TouchableOpacity
-               style={[
-                 styles.serviceOption,
-                 filters.deliveryAvailable && styles.serviceOptionSelected
-               ]}
-               onPress={() => updateFilter('deliveryAvailable', !filters.deliveryAvailable)}
-             >
-               <Ionicons 
-                 name="car-outline" 
-                 size={20} 
-                 color={filters.deliveryAvailable ? colors.white : colors.primary} 
-               />
-               <Text style={[
-                 styles.serviceOptionText,
-                 filters.deliveryAvailable && styles.serviceOptionTextSelected
-               ]}>
-                 Delivery Available
-               </Text>
-             </TouchableOpacity>
-             
-             <TouchableOpacity
-               style={[
-                 styles.serviceOption,
-                 filters.airportPickup && styles.serviceOptionSelected
-               ]}
-               onPress={() => updateFilter('airportPickup', !filters.airportPickup)}
-             >
-               <Ionicons 
-                 name="airplane-outline" 
-                 size={20} 
-                 color={filters.airportPickup ? colors.white : colors.primary} 
-               />
-               <Text style={[
-                 styles.serviceOptionText,
-                 filters.airportPickup && styles.serviceOptionTextSelected
-               ]}>
-                 Airport Pickup
-               </Text>
-             </TouchableOpacity>
-           </View>
-         </View>
+        <DateFilter
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          onShowDatePicker={setShowDatePicker}
+          formatDate={formatDate}
+        />
+        <PriceRangeFilter
+          priceRange={filters.priceRange}
+          onUpdateFilter={updateFilter as any}
+        />
+        <OptionFilter
+          title="Vehicle Type"
+          options={VEHICLE_TYPES}
+          selectedOptions={filters.vehicleTypes}
+          onToggleOption={(type) => toggleArrayFilter('vehicleTypes', type)}
+        />
+        <OptionFilter
+          title="Fuel Type"
+          options={FUEL_TYPES}
+          selectedOptions={filters.fuelTypes}
+          onToggleOption={(type) => toggleArrayFilter('fuelTypes', type)}
+        />
+        <OptionFilter
+          title="Transmission Type"
+          options={TRANSMISSION_TYPES}
+          selectedOptions={filters.transmissionTypes}
+          onToggleOption={(type) => toggleArrayFilter('transmissionTypes', type)}
+        />
+        <SeatingCapacityFilter
+          minSeatingCapacity={filters.minSeatingCapacity}
+          onUpdateFilter={updateFilter as any}
+        />
+        <ConditionRatingFilter
+          minConditionRating={filters.minConditionRating}
+          onUpdateFilter={updateFilter as any}
+        />
+        <VerificationStatusFilter
+          verificationStatus={filters.verificationStatus}
+          onToggleFilter={(key, value) => toggleArrayFilter(key, value)}
+          filterKey="verificationStatus"
+        />
+        <FeaturesFilter
+          features={filters.features}
+          availableFeatures={availableFeatures}
+          featureCategories={featureCategories}
+          loadingFeatures={loadingFeatures}
+          onToggleFeature={toggleFeature}
+        />
+        <ServiceOptionsFilter
+          deliveryAvailable={filters.deliveryAvailable}
+          airportPickup={filters.airportPickup}
+          onUpdateFilter={updateFilter as any}
+        />
 
         {/* Filter Actions */}
         <View style={styles.filterActions}>
@@ -571,6 +356,61 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
     );
   };
 
+  const renderIslandSelectorModal = () => (
+    <Modal
+      visible={showIslandSelector}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowIslandSelector(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.islandModal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Island</Text>
+            <TouchableOpacity onPress={() => setShowIslandSelector(false)}>
+              <Ionicons name="close" size={24} color={colors.darkGrey} />
+            </TouchableOpacity>
+          </View>
+          
+          {islands.map(island => (
+            <TouchableOpacity
+              key={island.id}
+              style={[
+                styles.islandOption,
+                filters.island === island.id && styles.islandOptionSelected
+              ]}
+              onPress={() => {
+                updateFilter('island', island.id);
+                setShowAllIslands(false); // Reset "show all" when selecting specific island
+                setShowIslandSelector(false);
+                if (hasSearched) performSearch();
+              }}
+            >
+              <Text style={styles.islandEmoji}>{island.emoji}</Text>
+              <View style={styles.islandDetails}>
+                <Text style={[
+                  styles.islandOptionText,
+                  filters.island === island.id && styles.islandOptionTextSelected
+                ]}>
+                  {island.name}
+                </Text>
+                <Text style={styles.islandDescription}>{island.description}</Text>
+                <View style={styles.islandFeatures}>
+                  {island.features.slice(0, 2).map((feature, index) => (
+                    <Text key={index} style={styles.islandFeature}>{feature}</Text>
+                  ))}
+                </View>
+              </View>
+              {filters.island === island.id && (
+                <Ionicons name="checkmark" size={20} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    </Modal>
+  );
+
   const renderSortModal = () => (
     <Modal
       visible={showSortModal}
@@ -595,13 +435,13 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
                 filters.sortBy === option.key && styles.sortOptionSelected
               ]}
               onPress={() => {
-                updateFilter('sortBy', option.key as any);
+                updateFilter('sortBy', option.key as SearchFilters['sortBy']);
                 setShowSortModal(false);
                 if (hasSearched) performSearch();
               }}
             >
               <Ionicons 
-                name={option.icon as any} 
+                name={option.icon} 
                 size={20} 
                 color={filters.sortBy === option.key ? colors.primary : colors.lightGrey} 
               />
@@ -626,9 +466,49 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
       {/* Search Header */}
       <View style={styles.searchHeader}>
         <Text style={styles.title}>Search Vehicles</Text>
-        {island && (
-          <Text style={styles.subtitle}>{island}</Text>
-        )}
+        
+        {/* Island Selector - Prominent as per Story 1.2 */}
+        <View style={styles.islandSelectorContainer}>
+          <TouchableOpacity
+            style={styles.islandSelector}
+            onPress={() => setShowIslandSelector(true)}
+          >
+            <View style={styles.islandSelectorContent}>
+              <Ionicons name="location" size={20} color={colors.primary} />
+              <View style={styles.islandInfo}>
+                <Text style={styles.islandLabel}>Island</Text>
+                <Text style={styles.islandValue}>
+                  {showAllIslands ? 'All Islands' : islands.find(i => i.id === filters.island)?.name || filters.island}
+                </Text>
+              </View>
+              <Ionicons name="chevron-down" size={16} color={colors.lightGrey} />
+            </View>
+          </TouchableOpacity>
+          
+          {/* View All Islands Toggle */}
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              showAllIslands && styles.toggleButtonActive
+            ]}
+            onPress={() => {
+              setShowAllIslands(!showAllIslands);
+              if (hasSearched) performSearch();
+            }}
+          >
+            <Ionicons 
+              name={showAllIslands ? "globe" : "location-outline"} 
+              size={16} 
+              color={showAllIslands ? colors.white : colors.primary} 
+            />
+            <Text style={[
+              styles.toggleButtonText,
+              showAllIslands && styles.toggleButtonTextActive
+            ]}>
+              {showAllIslands ? 'All' : 'Filter'}
+            </Text>
+          </TouchableOpacity>
+        </View>
         
         <View style={styles.searchActions}>
           <TouchableOpacity
@@ -685,6 +565,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ navigation, route })
         />
       )}
 
+      {/* Island Selector Modal */}
+      {renderIslandSelectorModal()}
+      
       {/* Sort Modal */}
       {renderSortModal()}
     </View>
@@ -711,6 +594,58 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.lightGrey,
     marginBottom: spacing.md,
+  },
+  islandSelectorContainer: {
+    marginBottom: spacing.md,
+  },
+  islandSelector: {
+    backgroundColor: colors.offWhite,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.lightGrey,
+    marginBottom: spacing.sm,
+  },
+  islandSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  islandInfo: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  islandLabel: {
+    ...typography.caption,
+    color: colors.lightGrey,
+    marginBottom: 2,
+  },
+  islandValue: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.darkGrey,
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.offWhite,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignSelf: 'flex-start',
+  },
+  toggleButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  toggleButtonText: {
+    ...typography.caption,
+    marginLeft: spacing.xs,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  toggleButtonTextActive: {
+    color: colors.white,
   },
   searchActions: {
     flexDirection: 'row',
@@ -944,8 +879,59 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
+  },
+  islandModal: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+    padding: spacing.lg,
+    maxHeight: '80%',
+  },
+  islandOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.offWhite,
+  },
+  islandOptionSelected: {
+    backgroundColor: colors.offWhite,
+  },
+  islandEmoji: {
+    fontSize: 24,
+    marginRight: spacing.md,
+  },
+  islandDetails: {
+    flex: 1,
+  },
+  islandOptionText: {
+    ...typography.subheading,
+    marginBottom: spacing.xs,
+  },
+  islandOptionTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  islandDescription: {
+    ...typography.caption,
+    color: colors.lightGrey,
+    marginBottom: spacing.xs,
+  },
+  islandFeatures: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  islandFeature: {
+    ...typography.caption,
+    color: colors.primary,
+    backgroundColor: colors.offWhite,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    marginRight: spacing.xs,
+    fontSize: 10,
   },
   sortModal: {
     backgroundColor: colors.white,
@@ -1065,7 +1051,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#F59E0B',
+    backgroundColor: colors.warning,
     borderRadius: 8,
     width: 16,
     height: 16,

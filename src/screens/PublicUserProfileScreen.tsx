@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { StackScreenProps } from '@react-navigation/stack';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { colors, typography, spacing, borderRadius } from '../styles/theme';
+import { colors, typography, spacing, borderRadius } from '../styles/Theme';
 import { RootStackParamList, ROUTES } from '../navigation/routes';
 import { apiService } from '../services/apiService';
+import { vehicleService } from '../services/vehicleService';
 import { notificationService } from '../services/notificationService';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 interface PublicProfile {
   id: number;
@@ -108,6 +110,10 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [visibleTrips, setVisibleTrips] = useState(5);
+  const [visibleReviews, setVisibleReviews] = useState(5);
+  const [visibleVehicles, setVisibleVehicles] = useState(5);
+
   useEffect(() => {
     loadProfile();
   }, [userId]);
@@ -117,9 +123,9 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
       if (showLoader) setLoading(true);
       const response = await apiService.get(`/profiles/${userId}`);
       setProfile(response as PublicProfile);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading public profile:', error);
-      if (error?.response?.status === 404) {
+      if ((error as any)?.response?.status === 404) {
         notificationService.error('Profile not found or private');
         navigation.goBack();
       } else {
@@ -146,17 +152,14 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
     });
   };
 
-  const handleViewVehicle = (vehicle: Vehicle) => {
-    // Convert the public profile vehicle to the full Vehicle type expected by VehicleDetail
-    const fullVehicle = {
-      ...vehicle,
-      ownerId: 0, // This will be populated by the VehicleDetail screen
-      dailyRate: vehicle.daily_rate,
-      available: true,
-      driveSide: 'LHD' as const,
-      createdAt: new Date().toISOString(),
-    };
-    navigation.navigate(ROUTES.VEHICLE_DETAIL, { vehicle: fullVehicle });
+  const handleViewVehicle = async (vehicle: Vehicle) => {
+    try {
+      const fullVehicle = await vehicleService.getVehicleById(vehicle.id.toString());
+      navigation.navigate(ROUTES.VEHICLE_DETAIL, { vehicle: fullVehicle.vehicle });
+    } catch (error) {
+      console.error('Error fetching vehicle details:', error);
+      notificationService.error('Could not load vehicle details.');
+    }
   };
 
   const formatMemberSince = (dateString: string) => {
@@ -176,9 +179,9 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
 
   const getVerificationColor = (status: string) => {
     switch (status) {
-      case 'premium': return '#10B981';
-      case 'verified': return '#3B82F6';
-      case 'partial': return '#F59E0B';
+      case 'premium': return colors.premium;
+      case 'verified': return colors.info;
+      case 'partial': return colors.partial;
       default: return colors.lightGrey;
     }
   };
@@ -300,7 +303,7 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
           <View style={styles.statCard}>
             <View style={styles.ratingContainer}>
               <Text style={styles.statNumber}>{profile.stats.average_rating_received}</Text>
-              <Ionicons name="star" size={16} color="#F59E0B" />
+              <Ionicons name="star" size={16} color={colors.star} />
             </View>
             <Text style={styles.statLabel}>Average Rating</Text>
           </View>
@@ -368,10 +371,12 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
   const renderRecentTrips = () => {
     if (!profile?.recentTrips || profile.recentTrips.length === 0) return null;
 
+    const tripsToShow = profile.recentTrips.slice(0, visibleTrips);
+
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Recent Trips</Text>
-        {profile.recentTrips.map((trip, index) => (
+        {tripsToShow.map((trip, index) => (
           <View key={trip.id} style={styles.tripCard}>
             {trip.show_destination && (
               <Text style={styles.tripDestination}>{trip.destination}</Text>
@@ -396,9 +401,9 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
                 {[1, 2, 3, 4, 5].map(star => (
                   <Ionicons
                     key={star}
-                    name={star <= trip.trip_rating! ? 'star' : 'star-outline'}
+                    name={star <= (trip.trip_rating || 0) ? 'star' : 'star-outline'}
                     size={14}
-                    color="#F59E0B"
+                    color={colors.star}
                   />
                 ))}
               </View>
@@ -411,6 +416,11 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
             )}
           </View>
         ))}
+        {profile.recentTrips.length > visibleTrips && (
+          <TouchableOpacity style={styles.loadMoreButton} onPress={() => setVisibleTrips(visibleTrips + 5)}>
+            <Text style={styles.loadMoreButtonText}>Load More</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -418,10 +428,12 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
   const renderRecentReviews = () => {
     if (!profile?.recentReviews || profile.recentReviews.length === 0) return null;
 
+    const reviewsToShow = profile.recentReviews.slice(0, visibleReviews);
+
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Recent Reviews</Text>
-        {profile.recentReviews.map((review, index) => (
+        {reviewsToShow.map((review, index) => (
           <View key={review.id} style={styles.reviewCard}>
             <View style={styles.reviewHeader}>
               <View style={styles.reviewerInfo}>
@@ -451,7 +463,7 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
                     key={star}
                     name={star <= review.rating ? 'star' : 'star-outline'}
                     size={14}
-                    color="#F59E0B"
+                    color={colors.star}
                   />
                 ))}
               </View>
@@ -462,6 +474,11 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
             </Text>
           </View>
         ))}
+        {profile.recentReviews.length > visibleReviews && (
+          <TouchableOpacity style={styles.loadMoreButton} onPress={() => setVisibleReviews(visibleReviews + 5)}>
+            <Text style={styles.loadMoreButtonText}>Load More</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -469,10 +486,12 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
   const renderVehicles = () => {
     if (!profile?.vehicles || profile.vehicles.length === 0) return null;
 
+    const vehiclesToShow = profile.vehicles.slice(0, visibleVehicles);
+
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Vehicles</Text>
-        {profile.vehicles.map((vehicle, index) => (
+        {vehiclesToShow.map((vehicle, index) => (
           <TouchableOpacity 
             key={vehicle.id} 
             style={styles.vehicleCard}
@@ -489,7 +508,7 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
                 
                 {vehicle.average_rating && (
                   <View style={styles.vehicleRating}>
-                    <Ionicons name="star" size={14} color="#F59E0B" />
+                    <Ionicons name="star" size={14} color={colors.star} />
                     <Text style={styles.ratingText}>
                       {vehicle.average_rating.toFixed(1)} ({vehicle.total_reviews})
                     </Text>
@@ -501,6 +520,11 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
             <Ionicons name="chevron-forward" size={20} color={colors.primary} />
           </TouchableOpacity>
         ))}
+        {profile.vehicles.length > visibleVehicles && (
+          <TouchableOpacity style={styles.loadMoreButton} onPress={() => setVisibleVehicles(visibleVehicles + 5)}>
+            <Text style={styles.loadMoreButtonText}>Load More</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -533,13 +557,15 @@ export const PublicUserProfileScreen: React.FC<PublicUserProfileScreenProps> = (
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {renderHeader()}
-      {renderBadges()}
-      {renderStats()}
-      {renderBio()}
-      {renderRecentTrips()}
-      {renderRecentReviews()}
-      {renderVehicles()}
+      <ErrorBoundary>
+        {renderHeader()}
+        {renderBadges()}
+        {renderStats()}
+        {renderBio()}
+        {renderRecentTrips()}
+        {renderRecentReviews()}
+        {renderVehicles()}
+      </ErrorBoundary>
     </ScrollView>
   );
 }; 
@@ -597,6 +623,16 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
+  },
+  loadMoreButton: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  loadMoreButtonText: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '600',
   },
   placeholderImage: {
     width: 100,
@@ -887,4 +923,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: spacing.xs,
   },
-}); 
+});
